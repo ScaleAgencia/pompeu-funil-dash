@@ -383,27 +383,46 @@ function Attribute-Sales($funnels) {
   $rows = Read-Rows $file
   # cols: Produto,Nome,Email,Data,Valor,Taxas,Faturamento,Pagamento,utm...
   $tot = 0; $totV = 0.0; $attr = 0; $attrV = 0.0
+  $unSrc = @{}   # utm_source -> @{sales;rev} for UNATTRIBUTED sales
+  $byYear = @{}  # year -> @{sales;rev} for ALL FDI sales
   foreach ($r in $rows) {
     if ($r.Count -lt 5) { continue }
     if ((Deacc $r[0]) -notlike '*formula dos investimentos*') { continue }
     $sd = DKey $r[3]; if ($sd -eq '') { continue }
     $val = MoneyBR $r[4]
     $tot++; $totV += $val
-    $ek = $r[2].Trim().ToLowerInvariant()
-    if ($ek -eq '' -or $ek.IndexOf('@') -lt 0) { continue }
+    $yr = $sd.Substring(0, 4)
+    if (-not $byYear.ContainsKey($yr)) { $byYear[$yr] = @{ sales = 0; rev = 0.0 } }
+    $byYear[$yr].sales += 1; $byYear[$yr].rev += $val
     # best lead across both funnels with capture date <= sale date (closest)
     $best = $null
-    foreach ($fn in $funnels) {
-      $cands = $fn.emIndex[$ek]
-      if ($null -eq $cands) { continue }
-      foreach ($c in $cands) {
-        if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } }
+    $ek = $r[2].Trim().ToLowerInvariant()
+    if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
+      foreach ($fn in $funnels) {
+        $cands = $fn.emIndex[$ek]
+        if ($null -eq $cands) { continue }
+        foreach ($c in $cands) {
+          if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } }
+        }
       }
     }
-    if ($null -ne $best) { $best.node.rev += $val; $best.node.sales += 1; $attr++; $attrV += $val }
+    if ($null -ne $best) {
+      $best.node.rev += $val; $best.node.sales += 1; $attr++; $attrV += $val
+    } else {
+      # UNATTRIBUTED (nao rastreada): tally by utm_source (col idx 8)
+      $src = if ($r.Count -gt 8) { $r[8].Trim().ToLowerInvariant() } else { '' }
+      if ($src -eq '') { $src = '(sem utm_source)' }
+      if (-not $unSrc.ContainsKey($src)) { $unSrc[$src] = @{ sales = 0; rev = 0.0 } }
+      $unSrc[$src].sales += 1; $unSrc[$src].rev += $val
+    }
   }
   Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV)
-  return @{ totalSales = $tot; totalRev = [Math]::Round($totV, 2); attrSales = $attr; attrRev = [Math]::Round($attrV, 2) }
+  $unArr = New-Object System.Collections.ArrayList
+  foreach ($k in $unSrc.Keys) { [void]$unArr.Add(@{ src = $k; sales = $unSrc[$k].sales; rev = [Math]::Round($unSrc[$k].rev, 2) }) }
+  $unArr = @($unArr | Sort-Object { - $_.rev })
+  $yrArr = New-Object System.Collections.ArrayList
+  foreach ($k in ($byYear.Keys | Sort-Object)) { [void]$yrArr.Add(@{ year = $k; sales = $byYear[$k].sales; rev = [Math]::Round($byYear[$k].rev, 2) }) }
+  return @{ totalSales = $tot; totalRev = [Math]::Round($totV, 2); attrSales = $attr; attrRev = [Math]::Round($attrV, 2); unSrc = @($unArr); byYear = @($yrArr) }
 }
 
 # ---- Finalize: roll grain -> daily + grain array (after sales attributed) -

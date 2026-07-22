@@ -114,6 +114,24 @@ button{font-family:inherit}
 .goalbar{height:6px;border-radius:4px;background:var(--panel3);overflow:hidden;margin-top:8px}
 .goalbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold))}
 
+/* ---- vendas (tabelas) ---- */
+.split-bar{height:28px;border-radius:8px;overflow:hidden;display:flex;background:var(--panel3)}
+.split-bar>span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:width .5s}
+.split-bar .s-attr{background:var(--teal);color:#0d1220}
+.split-bar .s-un{background:var(--muted2);color:#0d1220}
+.vtbl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.tbl-card{margin-top:14px}
+.vtbl-grid .tbl-card{margin-top:0}
+.tbl-scroll{overflow-x:auto}
+.vtbl{width:100%;border-collapse:collapse;font-size:13px;min-width:340px}
+.vtbl th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.vtbl td{padding:9px 12px;border-bottom:1px solid var(--line)}
+.vtbl td.lab{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.vtbl td.num,.vtbl th.num{text-align:right;font-family:var(--display);font-variant-numeric:tabular-nums}
+.vtbl tbody tr:hover{background:var(--panel2)}
+.vtbl tr.tot td{font-weight:700;border-top:2px solid var(--line2);background:var(--panel2);border-bottom:0}
+.src-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:1px}
+
 /* ---- receita & roas ---- */
 .receita-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:4px}
 .receita-grid .kpi{grid-column:span 3}

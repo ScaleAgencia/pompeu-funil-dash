@@ -552,14 +552,93 @@
   function rr(t, p) { return '<tr><td style="color:var(--muted)">' + t + '</td><td class="pt pts-' + p + '" style="color:' + (p === 3 ? 'var(--hot)' : p === 2 ? 'var(--warm)' : p === 1 ? 'var(--cold)' : 'var(--muted)') + '">' + p + '</td></tr>'; }
 
   /* =====================================================================
+     VENDAS VIEW (visão geral do produto FDI)
+  ===================================================================== */
+  function allSpend(f) { var s = 0; arr(f.daily).forEach(function (r) { s += r.sp; }); return s; }
+  function tk(rev, n) { return n ? fBRL(rev / n) : '—'; }
+  function srcLabel(s) { if (!s || s === '(sem utm_source)') return '— sem utm_source —'; return s; }
+  function mountVendas() {
+    var host = document.getElementById('view-vendas');
+    var S = D.sales;
+    if (!S) { host.innerHTML = '<p class="empty">Sem dados de vendas.</p>'; return; }
+    var unRev = S.totalRev - S.attrRev, unSales = S.totalSales - S.attrSales;
+    var pctAttr = S.totalRev ? S.attrRev / S.totalRev : 0;
+    var segSp = allSpend(D.segunda), terSp = allSpend(D.terca);
+    var wAttr = S.totalRev ? S.attrRev / S.totalRev * 100 : 0;
+
+    // hero
+    var hero = '<div class="kpi-row" style="margin-top:14px">' +
+      card3('💰 Faturamento total · FDI', fBRL0(S.totalRev), '<span>todas as vendas do produto</span>') +
+      card3('🛒 Vendas totais', fInt(S.totalSales), '<span>ticket médio <span class="kv">' + tk(S.totalRev, S.totalSales) + '</span></span>') +
+      card3('🎯 Rastreado', fPct(pctAttr, 1), '<span>' + fBRL0(S.attrRev) + ' de ' + fBRL0(S.totalRev) + '</span>') +
+      '</div>';
+
+    // stacked bar rastreado vs nao
+    var bar = '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:10px">Rastreadas × Não rastreadas (faturamento)</div>' +
+      '<div class="split-bar"><span class="s-attr" style="width:' + wAttr + '%">' + (wAttr > 12 ? fPct(pctAttr, 0) : '') + '</span><span class="s-un" style="width:' + (100 - wAttr) + '%">' + (100 - wAttr > 12 ? fPct(1 - pctAttr, 0) : '') + '</span></div>' +
+      '<div class="score-legend" style="margin-top:10px"><div class="li"><span class="sw" style="background:var(--teal)"></span>Rastreadas <b>' + fBRL0(S.attrRev) + '</b></div><div class="li"><span class="sw" style="background:var(--muted2)"></span>Não rastreadas <b>' + fBRL0(unRev) + '</b></div></div></div>';
+
+    // Table 1 — resumo (soma)
+    var t1 = tblCard('Σ Resumo — soma das duas', tbl(
+      ['Categoria', 'Vendas', 'Faturamento', 'Ticket', '% Fat.'],
+      [
+        rowV(['<span class="src-dot" style="background:var(--teal)"></span>Rastreadas (tráfego)', fInt(S.attrSales), fBRL0(S.attrRev), tk(S.attrRev, S.attrSales), fPct(pctAttr, 1)]),
+        rowV(['<span class="src-dot" style="background:var(--muted2)"></span>Não rastreadas', fInt(unSales), fBRL0(unRev), tk(unRev, unSales), fPct(1 - pctAttr, 1)])
+      ],
+      rowV(['Total FDI', fInt(S.totalSales), fBRL0(S.totalRev), tk(S.totalRev, S.totalSales), '100%'], 'tot')
+    ));
+
+    // Table 2 — rastreadas por funil
+    var attrSp = terSp + segSp;
+    var t2 = tblCard('✅ Rastreadas — por funil (vieram do tráfego dos webinários)', tbl(
+      ['Funil', 'Vendas', 'Faturamento', 'Ticket', 'Investimento', 'ROAS'],
+      [
+        rowV(['Terça', fInt(D.terca.totalSales), fBRL0(D.terca.totalRev), tk(D.terca.totalRev, D.terca.totalSales), fBRL0(terSp), roasCell(terSp ? D.terca.totalRev / terSp : null)]),
+        rowV(['Segunda', fInt(D.segunda.totalSales), fBRL0(D.segunda.totalRev), tk(D.segunda.totalRev, D.segunda.totalSales), fBRL0(segSp), roasCell(segSp ? D.segunda.totalRev / segSp : null)])
+      ],
+      rowV(['Total rastreado', fInt(S.attrSales), fBRL0(S.attrRev), tk(S.attrRev, S.attrSales), fBRL0(attrSp), roasCell(attrSp ? S.attrRev / attrSp : null)], 'tot')
+    ));
+
+    // Table 3 — nao rastreadas por fonte
+    var un = arr(S.unSrc);
+    var unRows = un.map(function (o) { return rowV(['<span class="src-dot" style="background:var(--muted2)"></span>' + esc(srcLabel(o.src)), fInt(o.sales), fBRL0(o.rev), tk(o.rev, o.sales), fPct(unRev ? o.rev / unRev : 0, 1)]); }).join('');
+    var t3 = tblCard('❓ Não rastreadas — por fonte (orgânico, outras origens, ou anteriores ao funil)', tbl(
+      ['Fonte (utm_source)', 'Vendas', 'Faturamento', 'Ticket', '% do não rastr.'],
+      [unRows],
+      rowV(['Total não rastreado', fInt(unSales), fBRL0(unRev), tk(unRev, unSales), '100%'], 'tot')
+    ));
+
+    // por ano (contexto)
+    var yr = arr(S.byYear);
+    var t4 = '';
+    if (yr.length) {
+      var yrRows = yr.map(function (o) { return rowV([o.year, fInt(o.sales), fBRL0(o.rev), tk(o.rev, o.sales)]); }).join('');
+      t4 = tblCard('📅 Todas as vendas de FDI — por ano', tbl(['Ano', 'Vendas', 'Faturamento', 'Ticket'], [yrRows], ''));
+    }
+
+    var note = '<div class="banner" style="margin-top:16px">ℹ️ <div><b>Rastreadas</b> = compradores cruzados por e-mail com um lead do tráfego que entrou <b>antes</b> da compra. <b>Não rastreadas</b> = demais vendas do FDI (tráfego orgânico, outras origens, ou compras anteriores aos webinários de 2026). Receita = valor bruto da venda.</div></div>';
+
+    host.innerHTML = '<div class="section-title" style="margin-top:18px">Visão geral de vendas <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· Fórmula dos Investimentos</span><span class="st-line"></span></div>' +
+      hero + bar + note +
+      '<div class="vtbl-grid">' + t1 + t2 + '</div>' + t3 + t4;
+  }
+  function tblCard(title, inner) { return '<div class="card tbl-card"><div class="klabel" style="margin-bottom:10px">' + title + '</div><div class="tbl-scroll">' + inner + '</div></div>'; }
+  function tbl(heads, bodyRows, totRow) {
+    var th = '<tr>' + heads.map(function (h, i) { return '<th class="' + (i === 0 ? '' : 'num') + '">' + h + '</th>'; }).join('') + '</tr>';
+    return '<table class="vtbl"><thead>' + th + '</thead><tbody>' + bodyRows.join('') + (totRow || '') + '</tbody></table>';
+  }
+  function rowV(cells, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + cells.map(function (c, i) { return '<td class="' + (i === 0 ? 'lab' : 'num') + '">' + c + '</td>'; }).join('') + '</tr>'; }
+  function roasCell(r) { if (r == null) return '—'; var c = r >= 1.5 ? 'var(--teal)' : r >= 1 ? 'var(--gold)' : 'var(--red)'; return '<b style="color:' + c + '">' + fRoas(r) + '</b>'; }
+
+  /* =====================================================================
      ROUTER
   ===================================================================== */
   var mounted = {};
   function show(tab) {
-    if (!D[tab] && tab !== 'pesquisa') tab = 'segunda';
+    if (tab !== 'pesquisa' && tab !== 'vendas' && !D[tab]) tab = 'segunda';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-' + tab); });
-    if (!mounted[tab]) { mounted[tab] = true; if (tab === 'pesquisa') mountPesquisa(); else mountFunnel(tab); }
+    if (!mounted[tab]) { mounted[tab] = true; if (tab === 'pesquisa') mountPesquisa(); else if (tab === 'vendas') mountVendas(); else mountFunnel(tab); }
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
