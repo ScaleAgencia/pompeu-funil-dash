@@ -96,6 +96,16 @@
     }
     return { c: 'manter', t: 'Manter' };
   }
+  // quantos descendentes (conjunto/anúncio) estão como Acelerar — pra sinalizar na campanha
+  function countAccel(n, medCpl) {
+    var c = 0;
+    if (n.children) n.children.forEach(function (ch) {
+      var t = tagOf(ch, medCpl);
+      if (t && t.c === 'acelerar') c++;
+      c += countAccel(ch, medCpl);
+    });
+    return c;
+  }
   function cplColor(cpl, med) {
     if (cpl == null || !med) return 'var(--muted)';
     var r = cpl / med;
@@ -278,7 +288,8 @@
     var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
-    var tag = n.lvl === 0 || n.lvl === 2 ? tagOf(n, medCpl) : null;
+    var tag = tagOf(n, medCpl);
+    var accelN = hasKids ? countAccel(n, medCpl) : 0;
     var cplc = cplColor(n.cpl, medCpl);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
     var ttl = 'Leads ' + fInt(n.ld) + ' · Frio ' + n.f + ' · Morno ' + n.m + ' · Quente ' + n.q + (n.q > 0 ? ' · CPL qualif. ' + fBRL(n.cplQ) : '') + (n.rs > 0 ? ' · ' + n.rs + ' respostas' : '');
@@ -291,7 +302,9 @@
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
       '<div class="tr-num tr-q">' + qcell + '</div>' +
-      '<div class="tr-num">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') + '</div>' +
+      '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
+        (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' conjunto(s)/anúncio(s) com CPL barato pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
+      '</div>' +
       '</div>';
     var kids = '';
     if (hasKids && open) kids = n.children.map(function (c) { return treeRows(c, plat, fk, medQ, medCpl, path, true); }).join('');
