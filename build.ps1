@@ -200,7 +200,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
   if ($grain.ContainsKey($k)) { return $grain[$k] }
   $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai;
          sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0;
-         ld = 0; rs = 0; f = 0; m = 0; q = 0 }
+         ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 }
   $grain[$k] = $n; return $n
 }
 
@@ -285,7 +285,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     }
     $gk = "$d|$p|$ci|$si|$ai"
     $n = $grain[$gk]
-    if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0 }; $grain[$gk] = $n }
+    if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 }; $grain[$gk] = $n }
     $n.ld += 1
     $totalLeads++
     $lead = @{ d = $d; node = $n; resp = $false }
@@ -351,54 +351,104 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
   }
   Write-Host ("   [{0:n1}s] pesquisa $key : responses=$respTot matched=$respMatch  tiers f=$($tierTot.f) m=$($tierTot.m) q=$($tierTot.q)" -f $T.Elapsed.TotalSeconds)
 
-  # ---- roll grain -> daily (per date per plat) ----------------------------
+  # Return INTERMEDIATE state (rollup happens in Finalize-Funnel, AFTER sales attribution).
+  return @{
+    key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex;
+    totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
+    tierTot = $tierTot; dist = $dist; prof = $prof
+  }
+}
+
+# ---- money parser for sales ("R$ 1.997,00" -> 1997.0) -------------------
+function MoneyBR($s) {
+  if ($null -eq $s) { return 0.0 }
+  $s = ([string]$s) -replace '[^\d,\.]', ''
+  $s = $s -replace '\.', ''
+  $s = $s -replace ',', '.'
+  $d = 0.0
+  [void][double]::TryParse($s, [Globalization.NumberStyles]::Any, [Globalization.CultureInfo]::InvariantCulture, [ref]$d)
+  return $d
+}
+
+# ========================================================================
+#  Sales attribution (GLOBAL across both funnels, to dedup buyers in both)
+#  Cross buyer email x lead email; credit revenue to the lead registration
+#  closest BEFORE the purchase (causal). Product = Formula dos Investimentos.
+# ========================================================================
+$SALES_ID = '1BJ-T_Aj5oeMge667xWtX_SfGCSiibcFo7l0yLWTt_BQ'
+function Attribute-Sales($funnels) {
+  Write-Host "== sales : Formula dos Investimentos =="
+  $Ts = [Diagnostics.Stopwatch]::StartNew()
+  $file = Get-Csv $SALES_ID 0 'sales'
+  $rows = Read-Rows $file
+  # cols: Produto,Nome,Email,Data,Valor,Taxas,Faturamento,Pagamento,utm...
+  $tot = 0; $totV = 0.0; $attr = 0; $attrV = 0.0
+  foreach ($r in $rows) {
+    if ($r.Count -lt 5) { continue }
+    if ((Deacc $r[0]) -notlike '*formula dos investimentos*') { continue }
+    $sd = DKey $r[3]; if ($sd -eq '') { continue }
+    $val = MoneyBR $r[4]
+    $tot++; $totV += $val
+    $ek = $r[2].Trim().ToLowerInvariant()
+    if ($ek -eq '' -or $ek.IndexOf('@') -lt 0) { continue }
+    # best lead across both funnels with capture date <= sale date (closest)
+    $best = $null
+    foreach ($fn in $funnels) {
+      $cands = $fn.emIndex[$ek]
+      if ($null -eq $cands) { continue }
+      foreach ($c in $cands) {
+        if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } }
+      }
+    }
+    if ($null -ne $best) { $best.node.rev += $val; $best.node.sales += 1; $attr++; $attrV += $val }
+  }
+  Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV)
+  return @{ totalSales = $tot; totalRev = [Math]::Round($totV, 2); attrSales = $attr; attrRev = [Math]::Round($attrV, 2) }
+}
+
+# ---- Finalize: roll grain -> daily + grain array (after sales attributed) -
+function Finalize-Funnel($fn) {
+  $grain = $fn.grain
   $dayMap = @{}
   foreach ($n in $grain.Values) {
     $k = "$($n.d)|$($n.p)"
-    if (-not $dayMap.ContainsKey($k)) { $dayMap[$k] = @{ date = $n.d; p = $n.p; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0 } }
+    if (-not $dayMap.ContainsKey($k)) { $dayMap[$k] = @{ date = $n.d; p = $n.p; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 } }
     $x = $dayMap[$k]
     $x.sp += $n.sp; $x.im += $n.im; $x.ck += $n.ck; $x.lp += $n.lp; $x.rc += $n.rc; $x.px += $n.px
-    $x.ld += $n.ld; $x.rs += $n.rs; $x.f += $n.f; $x.m += $n.m; $x.q += $n.q
+    $x.ld += $n.ld; $x.rs += $n.rs; $x.f += $n.f; $x.m += $n.m; $x.q += $n.q; $x.rev += $n.rev; $x.sales += $n.sales
   }
   $daily = @($dayMap.Values | Sort-Object { $_.date }, { $_.p })
 
-  # ---- grain array (only nodes with any signal) ---------------------------
   $grArr = New-Object System.Collections.ArrayList
   foreach ($n in $grain.Values) {
-    if ($n.sp -eq 0 -and $n.ld -eq 0 -and $n.rs -eq 0) { continue }
+    if ($n.sp -eq 0 -and $n.ld -eq 0 -and $n.rs -eq 0 -and $n.sales -eq 0) { continue }
     [void]$grArr.Add(@{ d = $n.d; p = $n.p; c = $n.c; s = $n.s; a = $n.a;
       sp = [Math]::Round($n.sp, 2); im = [int]$n.im; ck = [int]$n.ck; lp = [int]$n.lp; rc = [int]$n.rc; px = [int]$n.px;
-      ld = $n.ld; rs = $n.rs; f = $n.f; m = $n.m; q = $n.q })
+      ld = $n.ld; rs = $n.rs; f = $n.f; m = $n.m; q = $n.q; rev = [Math]::Round($n.rev, 2); sales = $n.sales })
   }
 
-  # lead date range
-  Write-Host ("   [{0:n1}s] rollup+grain done (grainNodes=$($grArr.Count))" -f $T.Elapsed.TotalSeconds)
   $ds = @($daily | Where-Object { $_.ld -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
   $lmin = if ($ds.Count) { $ds[0] } else { '' }
   $lmax = if ($ds.Count) { $ds[$ds.Count - 1] } else { '' }
-  # leads captured in survey era + matched responses (for pesquisa response rate)
-  $leadsEra = 0
-  foreach ($x in $daily) { if ($x.date -ge $SURVEY_START) { $leadsEra += $x.ld } }
+  $leadsEra = 0; $totRev = 0.0; $totSales = 0
+  foreach ($x in $daily) { if ($x.date -ge $SURVEY_START) { $leadsEra += $x.ld }; $totRev += $x.rev; $totSales += $x.sales }
+  Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1}" -f $totRev, $totSales)
 
   return @{
-    key      = $key
-    leadMin  = $lmin
-    leadMax  = $lmax
-    totalLeads = $totalLeads
-    leadsEra = $leadsEra
-    respTot  = $respTot
-    respMatch = $respMatch
-    tierTot  = $tierTot
-    daily    = $daily
-    grain    = @($grArr)
-    dist     = $dist
-    prof     = $prof
+    key = $fn.key; leadMin = $lmin; leadMax = $lmax
+    totalLeads = $fn.totalLeads; leadsEra = $leadsEra
+    respTot = $fn.respTot; respMatch = $fn.respMatch; tierTot = $fn.tierTot
+    totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
+    daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
   }
 }
 
 # ========================================================================
-$seg = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
-$ter = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
+$segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
+$terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
+$salesInfo = Attribute-Sales @($segI, $terI)
+$seg = Finalize-Funnel $segI
+$ter = Finalize-Funnel $terI
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
@@ -469,6 +519,7 @@ function FunnelPayload($f) {
     totalLeads = $f.totalLeads; leadsEra = $f.leadsEra
     respTot = $f.respTot; respMatch = $f.respMatch
     tierTot = $f.tierTot
+    totalRev = $f.totalRev; totalSales = $f.totalSales
     daily = @($f.daily); grain = @($f.grain)
   }
 }
@@ -481,6 +532,8 @@ $payload = @{
   quenteMin     = $QUENTE_MIN
   mornoMin      = $MORNO_MIN
   surveyStart   = $SURVEY_START
+  product       = 'Formula dos Investimentos'
+  sales         = $salesInfo
   names         = @{ c = @($CampArr.ToArray()); s = @($SetArr.ToArray()); a = @($AdArr.ToArray()) }
   segunda       = FunnelPayload $seg
   terca         = FunnelPayload $ter

@@ -27,20 +27,28 @@
   /* ---------- aggregate a funnel over [lo,hi] ---------- */
   function agg(f, lo, hi) {
     var SS = D.surveyStart;
-    var o = { gSp: 0, mSp: 0, gLd: 0, mLd: 0, oLd: 0, gIm: 0, mIm: 0, gCk: 0, mCk: 0, mLp: 0, mRc: 0, resp: 0, f: 0, m: 0, q: 0, qSp: 0, qLd: 0, days: {} };
+    var o = { gSp: 0, mSp: 0, gLd: 0, mLd: 0, oLd: 0, gIm: 0, mIm: 0, gCk: 0, mCk: 0, mLp: 0, mRc: 0, resp: 0, f: 0, m: 0, q: 0, qSp: 0, qLd: 0,
+      gRev: 0, mRev: 0, oRev: 0, gSl: 0, mSl: 0, oSl: 0, days: {} };
     arr(f.daily).forEach(function (r) {
       if (r.date < lo || r.date > hi) return;
-      if (r.p === 'g') { o.gSp += r.sp; o.gLd += r.ld; o.gIm += r.im; o.gCk += r.ck; }
-      else if (r.p === 'm') { o.mSp += r.sp; o.mLd += r.ld; o.mIm += r.im; o.mCk += r.ck; o.mLp += r.lp; o.mRc += r.rc; }
-      else { o.oLd += r.ld; }
+      if (r.p === 'g') { o.gSp += r.sp; o.gLd += r.ld; o.gIm += r.im; o.gCk += r.ck; o.gRev += r.rev || 0; o.gSl += r.sales || 0; }
+      else if (r.p === 'm') { o.mSp += r.sp; o.mLd += r.ld; o.mIm += r.im; o.mCk += r.ck; o.mLp += r.lp; o.mRc += r.rc; o.mRev += r.rev || 0; o.mSl += r.sales || 0; }
+      else { o.oLd += r.ld; o.oRev += r.rev || 0; o.oSl += r.sales || 0; }
       o.resp += r.rs; o.f += r.f; o.m += r.m; o.q += r.q;
       if (r.date >= SS) { o.qSp += r.sp; o.qLd += r.ld; }  // survey-era scope for qualification metrics
-      var d = o.days[r.date] || (o.days[r.date] = { date: r.date, gLd: 0, mLd: 0, sp: 0, ld: 0 });
+      var d = o.days[r.date] || (o.days[r.date] = { date: r.date, gLd: 0, mLd: 0, sp: 0, ld: 0, rev: 0 });
       if (r.p === 'g') d.gLd += r.ld; else if (r.p === 'm') d.mLd += r.ld;
-      d.sp += r.sp; d.ld += r.ld;
+      d.sp += r.sp; d.ld += r.ld; d.rev += r.rev || 0;
     });
     o.spend = o.gSp + o.mSp;
     o.leads = o.gLd + o.mLd + o.oLd;
+    o.rev = o.gRev + o.mRev + o.oRev;
+    o.sales = o.gSl + o.mSl + o.oSl;
+    o.roas = o.spend ? o.rev / o.spend : null;
+    o.gRoas = o.gSp ? o.gRev / o.gSp : null;
+    o.mRoas = o.mSp ? o.mRev / o.mSp : null;
+    o.ticket = o.sales ? o.rev / o.sales : null;
+    o.cac = o.sales ? o.spend / o.sales : null;
     o.cpl = o.leads ? o.spend / o.leads : null;
     o.gCpl = o.gLd ? o.gSp / o.gLd : null;
     o.mCpl = o.mLd ? o.mSp / o.mLd : null;
@@ -184,6 +192,7 @@
     var showScore = st.hi >= D.surveyStart;
     body.innerHTML =
       kpiRow(key, a) +
+      receitaBlock(a) +
       (showScore ? scoreStrip(a) : coverageBanner()) +
       chartsBlock(key) +
       '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
@@ -194,6 +203,27 @@
 
   function coverageBanner() {
     return '<div class="banner">⏳ <div>A <b>pesquisa de qualificação</b> (leadscore) começou em <b>' + dfull(D.surveyStart) + '</b>. Selecione o período <b>“Pesquisa”</b> ou <b>“30 dias”</b> para ver taxa de resposta, qualificados e CPL qualificado.</div></div>';
+  }
+
+  function fRoas(x) { return (x || 0).toFixed(2).replace('.', ',') + '×'; }
+  function retBar(lab, w, val, cls) { return '<div class="rr"><span>' + lab + '</span><div class="bar"><i class="' + cls + '" style="width:' + Math.max(2, w) + '%"></i></div><b>' + val + '</b></div>'; }
+  function receitaBlock(a) {
+    var titleR = '<div class="section-title">Receita &amp; ROAS <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· Fórmula dos Investimentos</span><span class="st-line"></span></div>';
+    if (!(a.rev > 0 || a.sales > 0)) return titleR + '<div class="card"><div class="empty">Nenhuma venda de FDI atribuída neste período. As vendas são creditadas ao lead que comprou <b>depois</b> de entrar no funil — selecione <b>“Tudo”</b> para o histórico completo.</div></div>';
+    var roas = a.roas, cls = roas == null ? '' : (roas >= 1.5 ? 'good' : roas >= 1 ? 'ok' : 'bad');
+    var max = Math.max(a.spend, a.rev) || 1;
+    var conv = a.leads ? a.sales / a.leads : null;
+    var prodTot = D.sales ? D.sales.totalRev : null;
+    return titleR + '<div class="receita-grid">' +
+      '<div class="card roas-hero ' + cls + '"><div class="klabel">↩️ ROAS do tráfego</div>' +
+        '<div class="roas-val">' + (roas == null ? '—' : fRoas(roas)) + '</div>' +
+        '<div class="retorno">' + retBar('Investido', a.spend / max * 100, fBRL0(a.spend), 'inv') + retBar('Receita', a.rev / max * 100, fBRL0(a.rev), 'rev') + '</div>' +
+        '<div class="roas-foot">por plataforma · <span class="dot g"></span>Google <b>' + (a.gRoas == null ? '—' : fRoas(a.gRoas)) + '</b> &nbsp; <span class="dot m"></span>Meta <b>' + (a.mRoas == null ? '—' : fRoas(a.mRoas)) + '</b></div>' +
+        '<div class="roas-note">Receita creditada ao dia do lead. Recortes recentes subestimam (vendas ainda maturam) — use <b>“Tudo”</b> para o ROAS consolidado.</div>' +
+      '</div>' +
+      '<div class="card kpi"><div class="klabel">💵 Faturamento</div><div class="kval">' + fBRL0(a.rev) + '</div><div class="ksub"><span>atribuído ao funil</span>' + (prodTot ? '<span style="color:var(--muted2)">produto todo: ' + fBRL0(prodTot) + '</span>' : '') + '</div></div>' +
+      '<div class="card kpi"><div class="klabel">🛒 Vendas de FDI</div><div class="kval">' + fInt(a.sales) + '</div><div class="ksub"><span>Ticket <span class="kv">' + money(a.ticket) + '</span></span><span>CAC <span class="kv">' + money(a.cac) + '</span></span><span>conv. lead→venda <span class="kv">' + fPct(conv, 2) + '</span></span></div></div>' +
+      '</div>';
   }
 
   function kpiRow(key, a) {
