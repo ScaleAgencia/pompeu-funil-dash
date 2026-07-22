@@ -85,24 +85,25 @@
   }
   function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
-  // Tag de ação — foco em CPL BARATO (objetivo atual). Barato => Acelerar.
+  // Tag de ação — foco em CPL BARATO (objetivo atual). Barato => Acelerar, muito caro => Pausar.
   function tagOf(n, medCpl) {
     if (n.sp <= 0) return null;
-    if (n.ld === 0) return { c: 'atencao', t: 'Atenção' };
-    if (n.ld < 15) return { c: 'insuf', t: 'Dado insuf.' };
+    if (n.ld === 0) return { c: 'pausar', t: 'Pausar' };          // gastou e não captou lead
+    if (n.ld < 15) return { c: 'insuf', t: 'Dado insuf.' };       // volume baixo p/ concluir
     if (medCpl) {
-      if (n.cpl <= 0.8 * medCpl) return { c: 'acelerar', t: 'Acelerar' };
-      if (n.cpl >= 1.35 * medCpl) return { c: 'revisar', t: 'Revisar' };
+      if (n.cpl <= 0.8 * medCpl) return { c: 'acelerar', t: 'Acelerar' };   // CPL barato
+      if (n.cpl >= 1.8 * medCpl) return { c: 'pausar', t: 'Pausar' };       // CPL muito caro
+      if (n.cpl >= 1.35 * medCpl) return { c: 'revisar', t: 'Revisar' };    // CPL caro
     }
     return { c: 'manter', t: 'Manter' };
   }
-  // quantos descendentes (conjunto/anúncio) estão como Acelerar — pra sinalizar na campanha
-  function countAccel(n, medCpl) {
+  // quantos descendentes (conjunto/anúncio) estão numa dada tag — pra sinalizar na campanha
+  function countTag(n, medCpl, cls) {
     var c = 0;
     if (n.children) n.children.forEach(function (ch) {
       var t = tagOf(ch, medCpl);
-      if (t && t.c === 'acelerar') c++;
-      c += countAccel(ch, medCpl);
+      if (t && t.c === cls) c++;
+      c += countTag(ch, medCpl, cls);
     });
     return c;
   }
@@ -289,7 +290,8 @@
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
     var tag = tagOf(n, medCpl);
-    var accelN = hasKids ? countAccel(n, medCpl) : 0;
+    var accelN = hasKids ? countTag(n, medCpl, 'acelerar') : 0;
+    var pausarN = hasKids ? countTag(n, medCpl, 'pausar') : 0;
     var cplc = cplColor(n.cpl, medCpl);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
     var ttl = 'Leads ' + fInt(n.ld) + ' · Frio ' + n.f + ' · Morno ' + n.m + ' · Quente ' + n.q + (n.q > 0 ? ' · CPL qualif. ' + fBRL(n.cplQ) : '') + (n.rs > 0 ? ' · ' + n.rs + ' respostas' : '');
@@ -304,6 +306,7 @@
       '<div class="tr-num tr-q">' + qcell + '</div>' +
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
         (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' conjunto(s)/anúncio(s) com CPL barato pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
+        (pausarN > 0 && (!tag || tag.c !== 'pausar') ? '<span class="pausar-mark" title="' + pausarN + ' conjunto(s)/anúncio(s) com CPL muito caro (ou sem lead) pra pausar aqui dentro — clique pra abrir">⏸ Pausar</span>' : '') +
       '</div>' +
       '</div>';
     var kids = '';
