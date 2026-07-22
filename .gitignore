@@ -1,0 +1,6 @@
+# raw CSVs baixados do Google Sheets (contêm PII: nome/email/telefone) — NUNCA commitar
+data/
+# locais
+*.log
+cprofile/
+site/

@@ -1,0 +1,53 @@
+name: refresh
+on:
+  workflow_dispatch:      # gatilho confiável (cron-job.org POST) a cada 3h
+  push:
+    branches: [main]      # redeploy ao mudar o código
+  schedule:
+    - cron: '17 */3 * * *' # backup best-effort (Actions atrasa/pula)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build data.js (gviz -> aggregate)
+        shell: powershell
+        run: .\build.ps1 -Mode all
+      - name: Assemble public site (only aggregated/public files)
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force site | Out-Null
+          Copy-Item index.html,app.js,styles.css,data.js site\
+          New-Item -ItemType File -Force site\.nojekyll | Out-Null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+          retention-days: 3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
