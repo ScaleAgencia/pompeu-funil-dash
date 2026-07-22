@@ -154,9 +154,9 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 .opt-totals .ot .v{font-family:var(--display);font-weight:700;font-size:16px;margin-top:2px}
 
 .tree{padding:6px 8px 12px}
-.tr-row{display:grid;grid-template-columns:1fr auto auto auto auto;gap:6px;align-items:center;padding:7px 8px;border-radius:8px;cursor:default}
+.tr-row{display:grid;grid-template-columns:1fr 68px 52px 62px 62px 74px;gap:5px;align-items:center;padding:7px 8px;border-radius:8px;cursor:default}
 .tr-row.lvl0{cursor:pointer}
-.tr-row.head{position:sticky;top:0;background:var(--panel);z-index:2;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;cursor:default;border-bottom:1px solid var(--line)}
+.tr-row.head{position:sticky;top:0;background:var(--panel);z-index:2;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid var(--line)}
 .tr-row:hover:not(.head){background:var(--panel2)}
 .tr-name{display:flex;align-items:center;gap:7px;min-width:0}
 .tr-name .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
@@ -166,9 +166,12 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 .tr-row.lvl2 .nm{color:var(--muted2);font-size:11.5px}
 .caret{width:14px;flex:0 0 auto;color:var(--muted);transition:transform .15s;font-size:10px}
 .caret.open{transform:rotate(90deg)}
-.tr-num{font-family:var(--display);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;min-width:64px}
+.tr-num{font-family:var(--display);font-size:12px;text-align:right;font-variant-numeric:tabular-nums;line-height:1.15}
 .tr-num.muted{color:var(--muted)}
-.tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-align:center;white-space:nowrap;min-width:74px}
+.tr-q .qc{font-weight:700}
+.tr-q .qc.has{color:var(--hot)}
+.tr-q .qsub{font-size:9px;color:var(--muted2);font-family:var(--font);font-weight:500}
+.tag{font-size:10px;font-weight:700;padding:3px 6px;border-radius:20px;text-align:center;white-space:nowrap}
 .tag.acelerar{color:#0d1220;background:var(--teal)}
 .tag.manter{color:var(--teal);background:rgba(47,216,166,.12)}
 .tag.revisar{color:var(--gold);background:rgba(245,196,81,.13)}

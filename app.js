@@ -85,17 +85,14 @@
   }
   function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
-  function tagOf(n, medQ) {
+  // Tag de ação — foco em CPL BARATO (objetivo atual). Barato => Acelerar.
+  function tagOf(n, medCpl) {
     if (n.sp <= 0) return null;
     if (n.ld === 0) return { c: 'atencao', t: 'Atenção' };
-    if (n.rs < 4 || n.q === 0 && n.rs < 8) {
-      if (n.q === 0 && n.rs >= 4) return { c: 'revisar', t: 'Revisar' };
-      return { c: 'insuf', t: 'Dado insuf.' };
-    }
-    if (n.q === 0) return { c: 'revisar', t: 'Revisar' };
-    if (medQ) {
-      if (n.cplQ <= 0.8 * medQ) return { c: 'acelerar', t: 'Acelerar' };
-      if (n.cplQ >= 1.4 * medQ) return { c: 'revisar', t: 'Revisar' };
+    if (n.ld < 15) return { c: 'insuf', t: 'Dado insuf.' };
+    if (medCpl) {
+      if (n.cpl <= 0.8 * medCpl) return { c: 'acelerar', t: 'Acelerar' };
+      if (n.cpl >= 1.35 * medCpl) return { c: 'revisar', t: 'Revisar' };
     }
     return { c: 'manter', t: 'Manter' };
   }
@@ -251,7 +248,7 @@
     var tot = list.reduce(function (o, n) { o.sp += n.sp; o.qsp += n.qsp; o.ld += n.ld; o.q += n.q; o.rs += n.rs; return o; }, { sp: 0, qsp: 0, ld: 0, q: 0, rs: 0 });
     var cpl = tot.ld ? tot.sp / tot.ld : null, cplQ = tot.q ? tot.qsp / tot.q : null;
     var medQ = median(list.filter(function (n) { return n.q >= 1; }).map(function (n) { return n.cplQ; }));
-    var medCpl = median(list.filter(function (n) { return n.ld >= 1; }).map(function (n) { return n.cpl; }));
+    var medCpl = median(list.filter(function (n) { return n.sp > 0 && n.ld >= 1; }).map(function (n) { return n.cpl; }));
     var nmeP = plat === 'g' ? 'Google Ads' : 'Meta Ads';
     var sub = plat === 'g' ? 'campanha › grupo › anúncio · sem imposto' : 'campanha › conjunto › anúncio · imposto ×1,1385';
     var withSp = list.filter(function (n) { return n.sp > 0; });
@@ -270,7 +267,7 @@
       ot('Qualificados', fInt(tot.q)) + ot('CPL qualif.', money(cplQ)) + ot('Respostas', fInt(tot.rs)) +
       '</div>' +
       '<div class="tree">' +
-      '<div class="tr-row head"><div class="tr-name">Campanha / conjunto / anúncio</div><div class="tr-num">Invest.</div><div class="tr-num">Leads</div><div class="tr-num">CPL</div><div class="tr-num">Ação</div></div>' +
+      '<div class="tr-row head"><div class="tr-name">Campanha / conjunto / anúncio</div><div class="tr-num">Invest.</div><div class="tr-num">Leads</div><div class="tr-num">CPL</div><div class="tr-num">Qualif.</div><div class="tr-num">Ação</div></div>' +
       rows + '</div></div>';
   }
   function ot(l, v) { return '<div class="ot"><div class="l">' + l + '</div><div class="v">' + v + '</div></div>'; }
@@ -281,16 +278,20 @@
     var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
-    var tag = n.lvl === 0 || n.lvl === 2 ? tagOf(n, medQ) : null;
+    var tag = n.lvl === 0 || n.lvl === 2 ? tagOf(n, medCpl) : null;
     var cplc = cplColor(n.cpl, medCpl);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
-    var qinfo = n.q > 0 ? ' · ' + n.q + '🔥 · CPLq ' + fBRL0(n.cplQ) : (n.rs > 0 ? ' · ' + n.rs + ' resp' : '');
-    var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + '>' +
+    var ttl = 'Leads ' + fInt(n.ld) + ' · Frio ' + n.f + ' · Morno ' + n.m + ' · Quente ' + n.q + (n.q > 0 ? ' · CPL qualif. ' + fBRL(n.cplQ) : '') + (n.rs > 0 ? ' · ' + n.rs + ' respostas' : '');
+    var qcell = n.q > 0
+      ? '<span class="qc has">' + fInt(n.q) + '</span><div class="qsub">' + fBRL0(n.cplQ) + '</div>'
+      : '<span class="qc muted">' + (n.rs > 0 ? '0' : '—') + '</span>';
+    var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
-      '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '" title="Qualificados:' + n.q + qinfo + '">' + (n.cpl == null ? '—' : fBRL0(n.cpl)) + '</span></div>' +
-      '<div class="tr-num">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="tr-num muted">—</span>') + '</div>' +
+      '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
+      '<div class="tr-num tr-q">' + qcell + '</div>' +
+      '<div class="tr-num">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') + '</div>' +
       '</div>';
     var kids = '';
     if (hasKids && open) kids = n.children.map(function (c) { return treeRows(c, plat, fk, medQ, medCpl, path, true); }).join('');
