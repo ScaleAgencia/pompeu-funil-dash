@@ -148,11 +148,20 @@
       preset(key, 'hoje', 'Hoje') + preset(key, 'ontem', 'Ontem') +
       preset(key, '7d', '7 dias') + preset(key, '30d', '30 dias') +
       preset(key, 'pesq', 'Pesquisa') + preset(key, 'tudo', 'Tudo') +
+      edSelect(key) +
       '<span class="daterange">' +
       '<input type="date" id="dl-' + key + '"> <span>até</span> <input type="date" id="dh-' + key + '">' +
       '</span></div>';
   }
   function preset(key, id, lab) { return '<button class="preset" data-p="' + id + '" data-k="' + key + '">' + lab + '</button>'; }
+  function edLabel(e) { return e.tag.replace(/^WBN-2026-/, '') + ' · ' + dfmt(e.lo) + '–' + dfmt(e.hi); }
+  function edSelect(key) {
+    var eds = arr(D[key].editions);
+    if (!eds.length) return '';
+    var opts = '<option value="">📅 Semana ▾</option>';
+    eds.slice().sort(function (a, b) { return b.num - a.num; }).forEach(function (e) { opts += '<option value="' + e.tag + '">' + edLabel(e) + '</option>'; });
+    return '<select class="ed-select" id="ed-' + key + '" title="Filtrar por edição/semana do webinário">' + opts + '</select>';
+  }
 
   function wirePeriod(key, minD, maxD) {
     var pb = $('#pb-' + key);
@@ -179,6 +188,16 @@
       renderFunnel(key);
     }
     dl.addEventListener('change', onDate); dh.addEventListener('change', onDate);
+    var sel = $('#ed-' + key);
+    if (sel) {
+      var edMap = {}; arr(D[key].editions).forEach(function (e) { edMap[e.tag] = e; });
+      sel.addEventListener('change', function () {
+        var tag = sel.value;
+        if (!tag) { STATE[key] = { preset: 'tudo', lo: minD, hi: maxD }; renderFunnel(key); return; }
+        var e = edMap[tag];
+        STATE[key] = { preset: 'ed', ed: tag, lo: e.lo, hi: e.hi }; renderFunnel(key);
+      });
+    }
   }
 
   function renderFunnel(key) {
@@ -186,11 +205,14 @@
     var pb = $('#pb-' + key);
     Array.prototype.forEach.call(pb.querySelectorAll('.preset'), function (b) { b.classList.toggle('active', b.getAttribute('data-p') === st.preset); });
     $('#dl-' + key).value = st.lo; $('#dh-' + key).value = st.hi;
+    var edSel = $('#ed-' + key); if (edSel) { edSel.value = st.preset === 'ed' ? st.ed : ''; edSel.classList.toggle('on', st.preset === 'ed'); }
+    var edBadge = st.preset === 'ed' ? '<span class="ed-badge">Edição ' + st.ed.replace(/^WBN-2026-/, '') + ' · semana ' + dfmt(st.lo) + '–' + dfmt(st.hi) + '</span>' : '';
 
     var a = agg(f, st.lo, st.hi);
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
     body.innerHTML =
+      (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '<span class="ed-hint">todas as métricas abaixo filtradas por esta semana</span></div>' : '') +
       kpiRow(key, a) +
       receitaBlock(a) +
       (showScore ? scoreStrip(a) : coverageBanner()) +

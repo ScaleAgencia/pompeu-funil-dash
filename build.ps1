@@ -91,6 +91,9 @@ function DKey($s) {              # -> yyyy-mm-dd or ''
 }
 
 function Iif($c, $a, $b) { if ($c) { return $a } else { return $b } }
+function MidDate($a, $b) { $da = [DateTime]::ParseExact($a, 'yyyy-MM-dd', $null); $db = [DateTime]::ParseExact($b, 'yyyy-MM-dd', $null); return $da.AddDays([Math]::Floor(($db - $da).TotalDays / 2)).ToString('yyyy-MM-dd') }
+function AddDaysS($a, $n) { return ([DateTime]::ParseExact($a, 'yyyy-MM-dd', $null)).AddDays($n).ToString('yyyy-MM-dd') }
+function EdNum($t) { if ($t -match '(\d+)$') { return [int]$matches[1] } return 0 }
 function EmKey($s) { if ($null -eq $s) { return '' }; return (([string]$s) -replace '\s', '').ToLowerInvariant() }
 function PhKey($s) {
   if ($null -eq $s) { return '' }
@@ -255,6 +258,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
   $rows = Read-Rows $fLead
   $emIndex = @{}   # emailKey -> ArrayList of leadObj (this funnel)
   $phIndex = @{}
+  $edLeads = @{}   # tag -> lead count (edicao/semana)
+  $edDay = @{}     # "tag|date" -> count (pra achar o dia de pico)
   $totalLeads = 0
   $pfxLen = $tagPfx.Length
   $semC = Intern $CampArr $CampMap '(sem rastreio)'
@@ -288,6 +293,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 }; $grain[$gk] = $n }
     $n.ld += 1
     $totalLeads++
+    $edLeads[$tag] = $edLeads[$tag] + 1
+    $ek2 = "$tag|$d"; $edDay[$ek2] = $edDay[$ek2] + 1
     $lead = @{ d = $d; node = $n; resp = $false }
     $ek = $em.Trim().ToLowerInvariant()
     $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
@@ -355,7 +362,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
   return @{
     key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
-    tierTot = $tierTot; dist = $dist; prof = $prof
+    tierTot = $tierTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay
   }
 }
 
@@ -451,13 +458,30 @@ function Finalize-Funnel($fn) {
   $lmax = if ($ds.Count) { $ds[$ds.Count - 1] } else { '' }
   $leadsEra = 0; $totRev = 0.0; $totSales = 0
   foreach ($x in $daily) { if ($x.date -ge $SURVEY_START) { $leadsEra += $x.ld }; $totRev += $x.rev; $totSales += $x.sales }
-  Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1}" -f $totRev, $totSales)
+
+  # ---- editions/weeks: peak day per tag -> clean non-overlapping windows ----
+  $edPeak = @{}; $edPeakN = @{}
+  foreach ($k in $fn.edDay.Keys) {
+    $sp = $k.Split('|'); $tg = $sp[0]; $dd = $sp[1]; $c = $fn.edDay[$k]
+    if (-not $edPeakN.ContainsKey($tg) -or $c -gt $edPeakN[$tg]) { $edPeakN[$tg] = $c; $edPeak[$tg] = $dd }
+  }
+  $tags = @($edPeak.Keys | Sort-Object { EdNum $_ })
+  $eds = New-Object System.Collections.ArrayList
+  for ($i = 0; $i -lt $tags.Count; $i++) {
+    $tg = $tags[$i]; $pk = $edPeak[$tg]
+    $lo = if ($i -eq 0) { $lmin } else { MidDate $edPeak[$tags[$i - 1]] $pk }
+    $hi = if ($i -eq $tags.Count - 1) { $lmax } else { AddDaysS (MidDate $pk $edPeak[$tags[$i + 1]]) -1 }
+    if ($lo -lt $lmin) { $lo = $lmin }
+    [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $pk; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
+  }
+  Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1} edicoes={2}" -f $totRev, $totSales, $eds.Count)
 
   return @{
     key = $fn.key; leadMin = $lmin; leadMax = $lmax
     totalLeads = $fn.totalLeads; leadsEra = $leadsEra
     respTot = $fn.respTot; respMatch = $fn.respMatch; tierTot = $fn.tierTot
     totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
+    editions = @($eds)
     daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
   }
 }
@@ -539,6 +563,7 @@ function FunnelPayload($f) {
     respTot = $f.respTot; respMatch = $f.respMatch
     tierTot = $f.tierTot
     totalRev = $f.totalRev; totalSales = $f.totalSales
+    editions = @($f.editions)
     daily = @($f.daily); grain = @($f.grain)
   }
 }
