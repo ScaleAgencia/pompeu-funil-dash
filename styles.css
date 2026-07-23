@@ -76,10 +76,22 @@ button{font-family:inherit}
 .preset{border:1px solid var(--line2);background:var(--panel2);color:var(--muted);cursor:pointer;padding:8px 14px;border-radius:8px;font-size:13.5px;font-weight:600;transition:.15s}
 .preset:hover{color:var(--txt);border-color:var(--gold-dim)}
 .preset.active{background:linear-gradient(160deg,#2a2416,#241d10);color:var(--gold);border-color:var(--gold-dim)}
-.ed-select{border:1px solid var(--line2);background:var(--panel2);color:var(--txt);cursor:pointer;padding:9px 12px;border-radius:8px;font-size:15px;font-weight:600;font-family:inherit;color-scheme:dark;min-width:210px}
-.ed-select option{font-size:15px;font-weight:600;padding:10px 12px;background:#141b2b;color:#eaf0fb;font-family:inherit}
-.ed-select:hover{color:var(--txt);border-color:var(--gold-dim)}
-.ed-select.on{background:linear-gradient(160deg,#2a2416,#241d10);color:var(--gold);border-color:var(--gold-dim)}
+/* dropdown proprio de semana/edicao (select nativo ignora CSS na lista) */
+.ed-dd{position:relative;display:inline-block}
+.ed-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--txt);cursor:pointer;padding:9px 14px;border-radius:8px;font-size:15px;font-weight:600;font-family:inherit;min-width:210px;justify-content:space-between;transition:.15s}
+.ed-btn:hover{border-color:var(--gold-dim)}
+.ed-btn.on{background:linear-gradient(160deg,#2a2416,#241d10);color:var(--gold);border-color:var(--gold-dim)}
+.ed-caret{font-size:12px;color:var(--muted)}
+.ed-menu{position:absolute;top:calc(100% + 8px);left:0;z-index:70;min-width:300px;max-height:420px;overflow-y:auto;
+  background:#111827;border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.65)}
+.ed-menu::-webkit-scrollbar{width:10px}
+.ed-menu::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px}
+.ed-item{display:flex;align-items:center;justify-content:space-between;gap:18px;white-space:nowrap;
+  padding:12px 14px;border-radius:8px;cursor:pointer;font-size:15.5px;font-weight:600;color:var(--txt);transition:.12s}
+.ed-item:hover{background:var(--panel3)}
+.ed-item.sel{background:linear-gradient(160deg,#2a2416,#241d10);color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold-dim)}
+.ed-it-sub{font-size:13px;font-weight:500;color:var(--muted2)}
+.ed-item.sel .ed-it-sub{color:var(--gold-dim)}
 .ed-badge-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 2px}
 .ed-badge{font-family:var(--display);font-weight:700;font-size:14px;color:var(--gold);background:rgba(245,196,81,.1);border:1px solid rgba(245,196,81,.3);padding:7px 14px;border-radius:20px}
 .ed-hint{font-size:12px;color:var(--muted2)}

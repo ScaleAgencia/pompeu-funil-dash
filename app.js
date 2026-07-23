@@ -155,12 +155,18 @@
   }
   function preset(key, id, lab) { return '<button class="preset" data-p="' + id + '" data-k="' + key + '">' + lab + '</button>'; }
   function edLabel(e) { return e.tag.replace(/^WBN-2026-/, '') + ' · ' + dfmt(e.lo) + '–' + dfmt(e.hi); }
+  // dropdown proprio (o <select> nativo tem a lista desenhada pelo SO e ignora CSS)
   function edSelect(key) {
     var eds = arr(D[key].editions);
     if (!eds.length) return '';
-    var opts = '<option value="">📅 Semana ▾</option>';
-    eds.slice().sort(function (a, b) { return b.num - a.num; }).forEach(function (e) { opts += '<option value="' + e.tag + '">' + edLabel(e) + '</option>'; });
-    return '<select class="ed-select" id="ed-' + key + '" title="Filtrar por edição/semana do webinário">' + opts + '</select>';
+    var items = '<div class="ed-item" data-v="">Todas as semanas</div>';
+    eds.slice().sort(function (a, b) { return b.num - a.num; }).forEach(function (e) {
+      items += '<div class="ed-item" data-v="' + e.tag + '"><span>' + edLabel(e) + '</span><span class="ed-it-sub">' + fInt(e.leads) + ' leads</span></div>';
+    });
+    return '<div class="ed-dd" id="edwrap-' + key + '">' +
+      '<button type="button" class="ed-btn" id="edbtn-' + key + '" title="Filtrar por edição/semana do webinário">' +
+      '<span class="ed-btn-t">📅 Semana</span><span class="ed-caret">▾</span></button>' +
+      '<div class="ed-menu" id="edmenu-' + key + '" hidden>' + items + '</div></div>';
   }
 
   function wirePeriod(key, minD, maxD) {
@@ -188,15 +194,23 @@
       renderFunnel(key);
     }
     dl.addEventListener('change', onDate); dh.addEventListener('change', onDate);
-    var sel = $('#ed-' + key);
-    if (sel) {
+    var wrap = $('#edwrap-' + key);
+    if (wrap) {
+      var btn = $('#edbtn-' + key), menu = $('#edmenu-' + key);
       var edMap = {}; arr(D[key].editions).forEach(function (e) { edMap[e.tag] = e; });
-      sel.addEventListener('change', function () {
-        var tag = sel.value;
+      btn.addEventListener('click', function (ev) { ev.stopPropagation(); menu.hidden = !menu.hidden; });
+      menu.addEventListener('click', function (ev) {
+        var t = ev.target, it = null;
+        while (t && t !== menu) { if (t.classList && t.classList.contains('ed-item')) { it = t; break; } t = t.parentNode; }
+        if (!it) return;
+        menu.hidden = true;
+        var tag = it.getAttribute('data-v');
         if (!tag) { STATE[key] = { preset: 'tudo', lo: minD, hi: maxD }; renderFunnel(key); return; }
         var e = edMap[tag];
         STATE[key] = { preset: 'ed', ed: tag, lo: e.lo, hi: e.hi }; renderFunnel(key);
       });
+      document.addEventListener('click', function (ev) { if (!wrap.contains(ev.target)) menu.hidden = true; });
+      document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') menu.hidden = true; });
     }
   }
 
@@ -205,7 +219,15 @@
     var pb = $('#pb-' + key);
     Array.prototype.forEach.call(pb.querySelectorAll('.preset'), function (b) { b.classList.toggle('active', b.getAttribute('data-p') === st.preset); });
     $('#dl-' + key).value = st.lo; $('#dh-' + key).value = st.hi;
-    var edSel = $('#ed-' + key); if (edSel) { edSel.value = st.preset === 'ed' ? st.ed : ''; edSel.classList.toggle('on', st.preset === 'ed'); }
+    var edBtn = $('#edbtn-' + key);
+    if (edBtn) {
+      var curEd = st.preset === 'ed' ? st.ed : '';
+      var lbl = '📅 Semana';
+      if (curEd) { var ee = arr(f.editions).filter(function (x) { return x.tag === curEd; })[0]; if (ee) lbl = '📅 ' + edLabel(ee); }
+      edBtn.querySelector('.ed-btn-t').textContent = lbl;
+      edBtn.classList.toggle('on', !!curEd);
+      Array.prototype.forEach.call(document.querySelectorAll('#edmenu-' + key + ' .ed-item'), function (it) { var v = it.getAttribute('data-v'); it.classList.toggle('sel', !!v && v === curEd); });
+    }
     var edBadge = st.preset === 'ed' ? '<span class="ed-badge">Edição ' + st.ed.replace(/^WBN-2026-/, '') + ' · semana ' + dfmt(st.lo) + '–' + dfmt(st.hi) + '</span>' : '';
 
     var a = agg(f, st.lo, st.hi);
