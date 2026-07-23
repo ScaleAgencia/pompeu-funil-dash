@@ -459,20 +459,36 @@ function Finalize-Funnel($fn) {
   $leadsEra = 0; $totRev = 0.0; $totSales = 0
   foreach ($x in $daily) { if ($x.date -ge $SURVEY_START) { $leadsEra += $x.ld }; $totRev += $x.rev; $totSales += $x.sales }
 
-  # ---- editions/weeks: peak day per tag -> clean non-overlapping windows ----
-  $edPeak = @{}; $edPeakN = @{}
+  # ---- editions/weeks --------------------------------------------------
+  # Cada DIA pertence a edicao cuja tag DOMINA aquele dia (a virada acontece
+  # no dia do webinario). Isso bate com a contagem manual do cliente; usar o
+  # ponto medio entre picos errava a fronteira em 1 dia.
+  $dayTopTag = @{}; $dayTopN = @{}; $edPeak = @{}; $edPeakN = @{}
   foreach ($k in $fn.edDay.Keys) {
     $sp = $k.Split('|'); $tg = $sp[0]; $dd = $sp[1]; $c = $fn.edDay[$k]
+    if (-not $dayTopN.ContainsKey($dd) -or $c -gt $dayTopN[$dd]) { $dayTopN[$dd] = $c; $dayTopTag[$dd] = $tg }
     if (-not $edPeakN.ContainsKey($tg) -or $c -gt $edPeakN[$tg]) { $edPeakN[$tg] = $c; $edPeak[$tg] = $dd }
   }
-  $tags = @($edPeak.Keys | Sort-Object { EdNum $_ })
+  # janela de cada tag = min..max dos dias em que ela domina
+  $edLo = @{}; $edHi = @{}
+  foreach ($dd in $dayTopTag.Keys) {
+    $tg = $dayTopTag[$dd]
+    if (-not $edLo.ContainsKey($tg) -or $dd -lt $edLo[$tg]) { $edLo[$tg] = $dd }
+    if (-not $edHi.ContainsKey($tg) -or $dd -gt $edHi[$tg]) { $edHi[$tg] = $dd }
+  }
+  $tags = @($edLo.Keys | Sort-Object { EdNum $_ })
   $eds = New-Object System.Collections.ArrayList
   for ($i = 0; $i -lt $tags.Count; $i++) {
-    $tg = $tags[$i]; $pk = $edPeak[$tg]
-    $lo = if ($i -eq 0) { $lmin } else { MidDate $edPeak[$tags[$i - 1]] $pk }
-    $hi = if ($i -eq $tags.Count - 1) { $lmax } else { AddDaysS (MidDate $pk $edPeak[$tags[$i + 1]]) -1 }
-    if ($lo -lt $lmin) { $lo = $lmin }
-    [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $pk; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
+    $tg = $tags[$i]
+    $lo = $edLo[$tg]; $hi = $edHi[$tg]
+    if ($i -eq 0 -and $lmin -ne '' -and $lmin -lt $lo) { $lo = $lmin }           # 1a edicao pega o inicio
+    if ($i -eq $tags.Count - 1 -and $lmax -ne '' -and $lmax -gt $hi) { $hi = $lmax } # ultima segue ate hoje
+    if ($i -lt $tags.Count - 1) {                                                # fecha buracos ate a proxima
+      $nx = $edLo[$tags[$i + 1]]
+      $gapEnd = AddDaysS $nx -1
+      if ($hi -lt $gapEnd) { $hi = $gapEnd }
+    }
+    [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $edPeak[$tg]; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
   }
   Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1} edicoes={2}" -f $totRev, $totSales, $eds.Count)
 
