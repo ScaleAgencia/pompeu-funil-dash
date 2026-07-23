@@ -94,6 +94,13 @@ function Iif($c, $a, $b) { if ($c) { return $a } else { return $b } }
 function MidDate($a, $b) { $da = [DateTime]::ParseExact($a, 'yyyy-MM-dd', $null); $db = [DateTime]::ParseExact($b, 'yyyy-MM-dd', $null); return $da.AddDays([Math]::Floor(($db - $da).TotalDays / 2)).ToString('yyyy-MM-dd') }
 function AddDaysS($a, $n) { return ([DateTime]::ParseExact($a, 'yyyy-MM-dd', $null)).AddDays($n).ToString('yyyy-MM-dd') }
 function EdNum($t) { if ($t -match '(\d+)$') { return [int]$matches[1] } return 0 }
+# Inicio do ciclo semanal: recua ate o dia do webinario (dow: 1=segunda, 2=terca).
+# O dia do evento ja capta para a proxima edicao -> ciclo = [dia do evento .. vespera do proximo].
+function CycleStart($d, $dow) {
+  $dt = [DateTime]::ParseExact($d, 'yyyy-MM-dd', $null)
+  $back = (([int]$dt.DayOfWeek) - $dow + 7) % 7
+  return $dt.AddDays(- $back).ToString('yyyy-MM-dd')
+}
 function EmKey($s) { if ($null -eq $s) { return '' }; return (([string]$s) -replace '\s', '').ToLowerInvariant() }
 function PhKey($s) {
   if ($null -eq $s) { return '' }
@@ -433,7 +440,7 @@ function Attribute-Sales($funnels) {
 }
 
 # ---- Finalize: roll grain -> daily + grain array (after sales attributed) -
-function Finalize-Funnel($fn) {
+function Finalize-Funnel($fn, $dow) {
   $grain = $fn.grain
   $dayMap = @{}
   foreach ($n in $grain.Values) {
@@ -469,25 +476,17 @@ function Finalize-Funnel($fn) {
     if (-not $dayTopN.ContainsKey($dd) -or $c -gt $dayTopN[$dd]) { $dayTopN[$dd] = $c; $dayTopTag[$dd] = $tg }
     if (-not $edPeakN.ContainsKey($tg) -or $c -gt $edPeakN[$tg]) { $edPeakN[$tg] = $c; $edPeak[$tg] = $dd }
   }
-  # janela de cada tag = min..max dos dias em que ela domina
-  $edLo = @{}; $edHi = @{}
-  foreach ($dd in $dayTopTag.Keys) {
-    $tg = $dayTopTag[$dd]
-    if (-not $edLo.ContainsKey($tg) -or $dd -lt $edLo[$tg]) { $edLo[$tg] = $dd }
-    if (-not $edHi.ContainsKey($tg) -or $dd -gt $edHi[$tg]) { $edHi[$tg] = $dd }
-  }
-  $tags = @($edLo.Keys | Sort-Object { EdNum $_ })
+  # Janela = ciclo semanal ancorado no dia do webinario (regra do cliente):
+  # o dia do evento ja capta para a proxima edicao -> [dia do evento .. vespera do proximo].
+  $tags = @($edPeak.Keys | Sort-Object { EdNum $_ })
   $eds = New-Object System.Collections.ArrayList
-  for ($i = 0; $i -lt $tags.Count; $i++) {
-    $tg = $tags[$i]
-    $lo = $edLo[$tg]; $hi = $edHi[$tg]
-    if ($i -eq 0 -and $lmin -ne '' -and $lmin -lt $lo) { $lo = $lmin }           # 1a edicao pega o inicio
-    if ($i -eq $tags.Count - 1 -and $lmax -ne '' -and $lmax -gt $hi) { $hi = $lmax } # ultima segue ate hoje
-    if ($i -lt $tags.Count - 1) {                                                # fecha buracos ate a proxima
-      $nx = $edLo[$tags[$i + 1]]
-      $gapEnd = AddDaysS $nx -1
-      if ($hi -lt $gapEnd) { $hi = $gapEnd }
-    }
+  $usedCycle = @{}
+  foreach ($tg in $tags) {
+    $lo = CycleStart $edPeak[$tg] $dow
+    $hi = AddDaysS $lo 6
+    if ($usedCycle.ContainsKey($lo)) { Write-Host "   [aviso] ciclo $lo repetido em $tg" }
+    $usedCycle[$lo] = $tg
+    if ($lmin -ne '' -and $lo -lt $lmin) { $lo = $lmin }
     [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $edPeak[$tg]; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
   }
   Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1} edicoes={2}" -f $totRev, $totSales, $eds.Count)
@@ -506,8 +505,8 @@ function Finalize-Funnel($fn) {
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
 $salesInfo = Attribute-Sales @($segI, $terI)
-$seg = Finalize-Funnel $segI
-$ter = Finalize-Funnel $terI
+$seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
+$ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
