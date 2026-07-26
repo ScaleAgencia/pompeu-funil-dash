@@ -338,6 +338,9 @@
     var sub = plat === 'g' ? 'campanha › grupo › anúncio · sem imposto' : 'campanha › conjunto › anúncio · imposto ×1,1385';
     var withSp = list.filter(function (n) { return n.sp > 0; });
     var noSp = list.filter(function (n) { return n.sp <= 0; });
+    var sortKey = f.key + '_' + plat;
+    var so = SORT_STATE[sortKey] || { sk: 'sp', dir: -1 };
+    sortTree(withSp, so.sk, so.dir, medCpl);
     var rows = withSp.map(function (c) { return treeRows(c, plat, f.key, medQ, medCpl, '', true); }).join('');
     if (noSp.length) {
       var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, children: [], cpl: null, cplQ: null };
@@ -352,10 +355,47 @@
       ot('Qualificados', fInt(tot.q)) + ot('CPL qualif.', money(cplQ)) + ot('Respostas', fInt(tot.rs)) +
       '</div>' +
       '<div class="tree">' +
-      '<div class="tr-row head"><div class="tr-name">Campanha / conjunto / anúncio</div><div class="tr-num">Invest.</div><div class="tr-num">Leads</div><div class="tr-num">CPL</div><div class="tr-num">Qualif.</div><div class="tr-num">Ação</div></div>' +
+      '<div class="tr-row head">' +
+      sHead(sortKey, so, 'name', 'Campanha / conjunto / anúncio', 'tr-name') +
+      sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
+      sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
+      sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
+      sHead(sortKey, so, 'q', 'Qualif.', 'tr-num') +
+      sHead(sortKey, so, 'acao', 'Ação', 'tr-num') +
+      '</div>' +
       rows + '</div></div>';
   }
   function ot(l, v) { return '<div class="ot"><div class="l">' + l + '</div><div class="v">' + v + '</div></div>'; }
+
+  /* ---------- sortable tree headers ---------- */
+  var SORT_STATE = {}; // fk_plat -> {sk, dir}  (dir: 1 asc, -1 desc)
+  var ACT_RANK = { acelerar: 0, manter: 1, revisar: 2, insuf: 3, pausar: 4 };
+  function bestDir(sk) { return (sk === 'cpl' || sk === 'name' || sk === 'acao') ? 1 : -1; } // 1º clique = melhor→pior
+  function sortVal(n, sk, medCpl) {
+    if (sk === 'name') return n.name;
+    if (sk === 'sp') return n.sp;
+    if (sk === 'ld') return n.ld;
+    if (sk === 'q') return n.q;
+    if (sk === 'cpl') return n.cpl;               // null (sem leads) -> vai pro fim
+    if (sk === 'acao') { var t = tagOf(n, medCpl); return t ? ACT_RANK[t.c] : 9; }
+    return 0;
+  }
+  function sortTree(list, sk, dir, medCpl) {
+    list.sort(function (a, b) {
+      var va = sortVal(a, sk, medCpl), vb = sortVal(b, sk, medCpl);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;                   // nulos sempre por último
+      if (vb == null) return -1;
+      if (sk === 'name') return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+    list.forEach(function (n) { if (n.children && n.children.length) sortTree(n.children, sk, dir, medCpl); });
+  }
+  function sHead(sortKey, so, sk, lab, cls) {
+    var active = so.sk === sk;
+    var arrow = active ? (so.dir === 1 ? ' <span class="sarr">▲</span>' : ' <span class="sarr">▼</span>') : '';
+    return '<div class="' + cls + ' sortable' + (active ? ' sorted' : '') + '" data-sk="' + sk + '" data-sortk="' + sortKey + '" title="Ordenar por ' + lab + '">' + lab + arrow + '</div>';
+  }
 
   function treeRows(n, plat, fk, medQ, medCpl, parentPath, visible) {
     var path = parentPath + '¦' + n.name;
@@ -393,6 +433,15 @@
         var skey = r.getAttribute('data-k'), path = decodeURIComponent(r.getAttribute('data-path'));
         var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
         if (set[path]) delete set[path]; else set[path] = 1;
+        renderFunnel(key);
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#fbody-' + key + ' .tr-row.head .sortable'), function (h) {
+      h.addEventListener('click', function () {
+        var sortKey = h.getAttribute('data-sortk'), sk = h.getAttribute('data-sk');
+        var st = SORT_STATE[sortKey] || { sk: 'sp', dir: -1 };
+        if (st.sk === sk) st = { sk: sk, dir: -st.dir }; else st = { sk: sk, dir: bestDir(sk) };
+        SORT_STATE[sortKey] = st;
         renderFunnel(key);
       });
     });

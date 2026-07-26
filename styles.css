@@ -216,6 +216,11 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 .tr-row{display:grid;grid-template-columns:1fr 66px 50px 60px 60px 84px;gap:5px;align-items:center;padding:7px 8px;border-radius:8px;cursor:default}
 .tr-row.lvl0{cursor:pointer}
 .tr-row.head{position:sticky;top:0;background:var(--panel);z-index:2;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid var(--line)}
+.tr-row.head .sortable{cursor:pointer;user-select:none;transition:color .12s;display:flex;align-items:center;gap:3px}
+.tr-row.head .tr-num.sortable{justify-content:flex-end}
+.tr-row.head .sortable:hover{color:var(--txt)}
+.tr-row.head .sortable.sorted{color:var(--gold)}
+.tr-row.head .sarr{font-size:8px}
 .tr-row:hover:not(.head){background:var(--panel2)}
 .tr-name{display:flex;align-items:center;gap:7px;min-width:0}
 .tr-name .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
