@@ -403,7 +403,7 @@ function Attribute-Sales($funnels) {
     if ($r.Count -lt 5) { continue }
     if ((Deacc $r[0]) -notlike '*formula dos investimentos*') { continue }
     $sd = DKey $r[3]; if ($sd -eq '') { continue }
-    $val = MoneyBR $r[4]
+    $val = MoneyBR $r[6]   # Faturamento LIQUIDO (Valor - Taxas) — bate com o relatorio do cliente. Bruto = $r[4]
     $tot++; $totV += $val
     $yr = $sd.Substring(0, 4)
     if (-not $byYear.ContainsKey($yr)) { $byYear[$yr] = @{ sales = 0; rev = 0.0 } }

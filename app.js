@@ -265,7 +265,7 @@
         '<div class="roas-foot">por plataforma · <span class="dot g"></span>Google <b>' + (a.gRoas == null ? '—' : fRoas(a.gRoas)) + '</b> &nbsp; <span class="dot m"></span>Meta <b>' + (a.mRoas == null ? '—' : fRoas(a.mRoas)) + '</b></div>' +
         '<div class="roas-note">Receita creditada ao dia do lead. Recortes recentes subestimam (vendas ainda maturam) — use <b>“Tudo”</b> para o ROAS consolidado.</div>' +
       '</div>' +
-      '<div class="card kpi"><div class="klabel">💵 Faturamento</div><div class="kval">' + fBRL0(a.rev) + '</div><div class="ksub"><span>atribuído ao funil</span>' + (prodTot ? '<span style="color:var(--muted2)">produto todo: ' + fBRL0(prodTot) + '</span>' : '') + '</div></div>' +
+      '<div class="card kpi"><div class="klabel">💵 Faturamento <span style="text-transform:none;font-weight:500;color:var(--muted2)">líquido</span></div><div class="kval">' + fBRL0(a.rev) + '</div><div class="ksub"><span>atribuído ao funil (leads captados)</span>' + (prodTot ? '<span style="color:var(--muted2)">produto todo: ' + fBRL0(prodTot) + '</span>' : '') + '</div></div>' +
       '<div class="card kpi"><div class="klabel">🛒 Vendas de FDI</div><div class="kval">' + fInt(a.sales) + '</div><div class="ksub"><span>Ticket <span class="kv">' + money(a.ticket) + '</span></span><span>CAC <span class="kv">' + money(a.cac) + '</span></span><span>conv. lead→venda <span class="kv">' + fPct(conv, 2) + '</span></span></div></div>' +
       '</div>';
   }
@@ -661,7 +661,7 @@
 
     // hero
     var hero = '<div class="kpi-row" style="margin-top:14px">' +
-      card3('💰 Faturamento total · FDI', fBRL0(S.totalRev), '<span>todas as vendas do produto</span>') +
+      card3('💰 Faturamento total · FDI', fBRL0(S.totalRev), '<span>todas as vendas do produto · líquido</span>') +
       card3('🛒 Vendas totais', fInt(S.totalSales), '<span>ticket médio <span class="kv">' + tk(S.totalRev, S.totalSales) + '</span></span>') +
       card3('🎯 Rastreado', fPct(pctAttr, 1), '<span>' + fBRL0(S.attrRev) + ' de ' + fBRL0(S.totalRev) + '</span>') +
       '</div>';
@@ -709,7 +709,7 @@
       t4 = tblCard('📅 Todas as vendas de FDI — por ano', tbl(['Ano', 'Vendas', 'Faturamento', 'Ticket'], [yrRows], ''));
     }
 
-    var note = '<div class="banner" style="margin-top:16px">ℹ️ <div><b>Rastreadas</b> = compradores cruzados por e-mail com um lead do tráfego que entrou <b>antes</b> da compra. <b>Não rastreadas</b> = demais vendas do FDI (tráfego orgânico, outras origens, ou compras anteriores aos webinários de 2026). Receita = valor bruto da venda.</div></div>';
+    var note = '<div class="banner" style="margin-top:16px">ℹ️ <div><b>Rastreadas</b> = compradores cruzados por e-mail com um lead do tráfego que entrou <b>antes</b> da compra. <b>Não rastreadas</b> = demais vendas do FDI (tráfego orgânico, outras origens, ou compras anteriores aos webinários de 2026). Faturamento = valor <b>líquido</b> (já sem as taxas da plataforma).</div></div>';
 
     host.innerHTML = '<div class="section-title" style="margin-top:18px">Visão geral de vendas <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· Fórmula dos Investimentos</span><span class="st-line"></span></div>' +
       hero + bar + note +
