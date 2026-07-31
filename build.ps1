@@ -140,9 +140,11 @@ function PtRenda($a) {
   return 1
 }
 function PtMotiv($a) {
+  # CALIBRADO 29/07 (dados de conversao): 'futuro/aposentadoria' convertia 1,2% (abaixo da media)
+  # apesar de valer 2 pts -> rebaixado p/ 1. So 'perco tempo' mantem 2 pts.
   $t = Deacc $a; if ($t -eq '') { return 1 }
-  if ($t -like '*futuro*' -or $t -like '*aposentadoria*' -or $t -like '*perdendo tempo*') { return 2 }
-  if ($t -like '*seguranca*' -or $t -like '*renda extra*') { return 1 }
+  if ($t -like '*perdendo tempo*') { return 2 }
+  if ($t -like '*futuro*' -or $t -like '*aposentadoria*' -or $t -like '*seguranca*' -or $t -like '*renda extra*') { return 1 }
   if ($t -like '*poupanca*') { return 0 }
   return 1
 }
@@ -160,9 +162,11 @@ function PtValor($a) {
   return 1
 }
 function PtNivel($a) {
+  # CALIBRADO 29/07: Iniciante converte 3,1%; Intermediario/Avancado so 0,5% (ja sabem investir).
+  # Ponto so p/ Iniciante.
   $t = Deacc $a; if ($t -eq '') { return 0 }
-  if ($t -like '*nunca investi*') { return 0 }
-  return 1
+  if ($t -like '*iniciante*') { return 1 }
+  return 0
 }
 function PtCap($a) {
   $t = Deacc $a; if ($t -eq '') { return 0 }

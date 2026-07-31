@@ -631,10 +631,10 @@
       '<table class="ruler-tbl"><thead><tr><th>Dimensão / resposta</th><th style="text-align:center">Pontos</th></tr></thead><tbody>' +
       rgrp('Idade (peso 3)') + rr('50 anos ou mais', 3) + rr('31 a 50 anos', 2) + rr('Até 30 anos', 0) +
       rgrp('Renda mensal (peso 3)') + rr('Acima de R$ 10.000', 3) + rr('R$ 2.000 a R$ 10.000', 2) + rr('Até R$ 2.000', 1) + rr('Não possui renda', 0) +
-      rgrp('Motivação (peso 2)') + rr('Futuro/aposentadoria · perde tempo', 2) + rr('Segurança da família · renda extra', 1) + rr('Sair da poupança', 0) +
+      rgrp('Motivação (peso 2)') + rr('Sente que perde tempo', 2) + rr('Aposentadoria · segurança família · renda extra', 1) + rr('Sair da poupança', 0) +
       rgrp('O que trava (peso 2)') + rr('Falta de confiança · não sabe onde investir', 2) + rr('Falta de tempo', 1) + rr('Medo · falta de dinheiro · tarde demais', 0) +
       rgrp('Valor já investido (peso 2)') + rr('Acima de R$ 100.000', 2) + rr('Até R$ 100.000', 1) + rr('Ainda não investiu', 0) +
-      rgrp('Nível de investidor (peso 1)') + rr('Já investe', 1) + rr('Nunca investiu', 0) +
+      rgrp('Nível de investidor (peso 1)') + rr('Iniciante (poupança/Tesouro)', 1) + rr('Nunca · Intermediário · Avançado', 0) +
       rgrp('Capacidade mensal (peso 1)') + rr('Qualquer valor', 1) + rr('Não consegue investir agora', 0) +
       rgrp('Resultado esperado (peso 1)') + rr('Qualquer, exceto abaixo', 1) + rr('Saber por onde começar', 0) +
       '</tbody></table>' +
