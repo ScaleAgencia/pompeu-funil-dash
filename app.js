@@ -54,8 +54,11 @@
     o.mCpl = o.mLd ? o.mSp / o.mLd : null;
     o.ctr = o.gIm + o.mIm ? (o.gCk + o.mCk) / (o.gIm + o.mIm) : null;
     o.cpm = (o.gIm + o.mIm) ? o.spend / ((o.gIm + o.mIm) / 1000) : null;
+    // respostas contadas por DATA DA RESPOSTA (bate com a planilha ao filtrar por dia)
+    o.respTotal = 0; o.respTraffic = 0;
+    arr(f.survDaily).forEach(function (s) { if (s.date >= lo && s.date <= hi) { o.respTotal += s.tot; o.respTraffic += s.mat; } });
     // qualification metrics scoped to survey era (∩ period) so pre-survey days don't dilute
-    o.respRate = o.qLd ? o.resp / o.qLd : null;
+    o.respRate = o.qLd ? o.respTraffic / o.qLd : null;
     o.pctQ = o.resp ? o.q / o.resp : null;
     o.cplQ = o.q ? o.qSp / o.q : null;
     o.scoped = lo < SS;  // period includes pre-survey days
@@ -289,9 +292,9 @@
       // secondary metrics
       card3('📊 Alcance & cliques', fInt(a.gIm + a.mIm) + ' <span style="font-size:13px;color:var(--muted)">impr.</span>',
         '<span>Cliques <span class="kv">' + fInt(a.gCk + a.mCk) + '</span></span><span>CTR <span class="kv">' + fPct(a.ctr) + '</span></span><span>CPM <span class="kv">' + money(a.cpm) + '</span></span>') +
-      // response rate
-      card3('📝 Respostas da pesquisa', fInt(a.resp),
-        '<span>Taxa de resposta <span class="kv">' + fPct(a.respRate) + '</span></span>' + (a.scoped ? '<span style="color:var(--muted2)">desde ' + dfull(D.surveyStart) + '</span>' : '')) +
+      // response rate — respostas por DATA DA RESPOSTA (bate com a planilha)
+      card3('📝 Respostas <span class="pill-plat m" style="background:rgba(91,157,255,.14);color:var(--goog)">totais</span>', fInt(a.respTotal),
+        '<span>do tráfego <span class="kv">' + fInt(a.respTraffic) + '</span></span><span>Taxa resp. <span class="kv">' + fPct(a.respRate) + '</span></span><span style="color:var(--muted2)">contadas pela data da resposta</span>') +
       // qualified
       card3('🔥 Qualificados <span class="pill-plat m" style="background:rgba(255,106,77,.16);color:var(--hot)">Quente</span>', fInt(a.q),
         '<span>% qualif <span class="kv">' + fPct(a.pctQ) + '</span></span><span>CPL qualif. <span class="kv">' + money(a.cplQ) + '</span></span>' + (a.scoped ? '<span style="color:var(--muted2)">qualif. desde ' + dfull(D.surveyStart) + '</span>' : '')) +
@@ -631,10 +634,10 @@
       '<table class="ruler-tbl"><thead><tr><th>Dimensão / resposta</th><th style="text-align:center">Pontos</th></tr></thead><tbody>' +
       rgrp('Idade (peso 3)') + rr('50 anos ou mais', 3) + rr('31 a 50 anos', 2) + rr('Até 30 anos', 0) +
       rgrp('Renda mensal (peso 3)') + rr('Acima de R$ 10.000', 3) + rr('R$ 2.000 a R$ 10.000', 2) + rr('Até R$ 2.000', 1) + rr('Não possui renda', 0) +
-      rgrp('Motivação (peso 2)') + rr('Sente que perde tempo', 2) + rr('Aposentadoria · segurança família · renda extra', 1) + rr('Sair da poupança', 0) +
+      rgrp('Motivação (peso 2)') + rr('Futuro/aposentadoria · perde tempo', 2) + rr('Segurança da família · renda extra', 1) + rr('Sair da poupança', 0) +
       rgrp('O que trava (peso 2)') + rr('Falta de confiança · não sabe onde investir', 2) + rr('Falta de tempo', 1) + rr('Medo · falta de dinheiro · tarde demais', 0) +
       rgrp('Valor já investido (peso 2)') + rr('Acima de R$ 100.000', 2) + rr('Até R$ 100.000', 1) + rr('Ainda não investiu', 0) +
-      rgrp('Nível de investidor (peso 1)') + rr('Iniciante (poupança/Tesouro)', 1) + rr('Nunca · Intermediário · Avançado', 0) +
+      rgrp('Nível de investidor (peso 1)') + rr('Já investe', 1) + rr('Nunca investiu', 0) +
       rgrp('Capacidade mensal (peso 1)') + rr('Qualquer valor', 1) + rr('Não consegue investir agora', 0) +
       rgrp('Resultado esperado (peso 1)') + rr('Qualquer, exceto abaixo', 1) + rr('Saber por onde começar', 0) +
       '</tbody></table>' +

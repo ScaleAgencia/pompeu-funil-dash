@@ -140,11 +140,9 @@ function PtRenda($a) {
   return 1
 }
 function PtMotiv($a) {
-  # CALIBRADO 29/07 (dados de conversao): 'futuro/aposentadoria' convertia 1,2% (abaixo da media)
-  # apesar de valer 2 pts -> rebaixado p/ 1. So 'perco tempo' mantem 2 pts.
   $t = Deacc $a; if ($t -eq '') { return 1 }
-  if ($t -like '*perdendo tempo*') { return 2 }
-  if ($t -like '*futuro*' -or $t -like '*aposentadoria*' -or $t -like '*seguranca*' -or $t -like '*renda extra*') { return 1 }
+  if ($t -like '*futuro*' -or $t -like '*aposentadoria*' -or $t -like '*perdendo tempo*') { return 2 }
+  if ($t -like '*seguranca*' -or $t -like '*renda extra*') { return 1 }
   if ($t -like '*poupanca*') { return 0 }
   return 1
 }
@@ -162,11 +160,9 @@ function PtValor($a) {
   return 1
 }
 function PtNivel($a) {
-  # CALIBRADO 29/07: Iniciante converte 3,1%; Intermediario/Avancado so 0,5% (ja sabem investir).
-  # Ponto so p/ Iniciante.
   $t = Deacc $a; if ($t -eq '') { return 0 }
-  if ($t -like '*iniciante*') { return 1 }
-  return 0
+  if ($t -like '*nunca investi*') { return 0 }
+  return 1
 }
 function PtCap($a) {
   $t = Deacc $a; if ($t -eq '') { return 0 }
@@ -321,6 +317,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
   $rows = Read-Rows $fPesq
   $respTot = 0; $respMatch = 0
   $tierTot = @{ f = 0; m = 0; q = 0 }
+  $survDay = @{}   # data DA RESPOSTA (col Data) -> @{tot;mat} : bate com a planilha por dia
   # per-dimension distributions (this funnel) : dimKey -> (answerLabel -> count)
   $dist = @{}
   foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $dist[$dk] = @{} }
@@ -350,21 +347,23 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     $ek = EmKey $r[1]
     if ($ek -ne '' -and $emIndex.ContainsKey($ek)) { $cands = $emIndex[$ek] }
     if ($null -eq $cands) { $pk = PhKey $r[2]; if ($pk.Length -ge 8 -and $phIndex.ContainsKey($pk)) { $cands = $phIndex[$pk] } }
+    $didMatch = $false
     if ($null -ne $cands -and $cands.Count -gt 0) {
       $pick = $null
       foreach ($c in $cands) {
         if ($sd -eq '' -or $c.d -le $sd) { if ($null -eq $pick -or $c.d -gt $pick.d) { $pick = $c } }
       }
       if ($null -eq $pick) { foreach ($c in $cands) { if ($null -eq $pick -or $c.d -lt $pick.d) { $pick = $c } } }
-      if (-not $pick.resp) {
-        $pick.resp = $true
-        $pick.node.rs += 1
-        $pick.node[$tier] += 1
-        $respMatch++
-      } else {
-        # already responded once: still attribute the tier to the node (extra response)
-        $pick.node[$tier] += 1
+      if ($null -ne $pick) {
+        $didMatch = $true
+        if (-not $pick.resp) { $pick.resp = $true; $pick.node.rs += 1; $pick.node[$tier] += 1; $respMatch++ }
+        else { $pick.node[$tier] += 1 }
       }
+    }
+    # tally por DATA DA RESPOSTA (bate com a planilha ao filtrar por dia)
+    if ($sd -ne '') {
+      $sv = $survDay[$sd]; if ($null -eq $sv) { $sv = @{ tot = 0; mat = 0 }; $survDay[$sd] = $sv }
+      $sv.tot += 1; if ($didMatch) { $sv.mat += 1 }
     }
   }
   Write-Host ("   [{0:n1}s] pesquisa $key : responses=$respTot matched=$respMatch  tiers f=$($tierTot.f) m=$($tierTot.m) q=$($tierTot.q)" -f $T.Elapsed.TotalSeconds)
@@ -373,7 +372,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
   return @{
     key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
-    tierTot = $tierTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay
+    tierTot = $tierTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay
   }
 }
 
@@ -495,12 +494,16 @@ function Finalize-Funnel($fn, $dow) {
   }
   Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1} edicoes={2}" -f $totRev, $totSales, $eds.Count)
 
+  # respostas por DATA DA RESPOSTA (bate com a planilha)
+  $svArr = New-Object System.Collections.ArrayList
+  foreach ($k in ($fn.survDay.Keys | Sort-Object)) { [void]$svArr.Add(@{ date = $k; tot = $fn.survDay[$k].tot; mat = $fn.survDay[$k].mat }) }
+
   return @{
     key = $fn.key; leadMin = $lmin; leadMax = $lmax
     totalLeads = $fn.totalLeads; leadsEra = $leadsEra
     respTot = $fn.respTot; respMatch = $fn.respMatch; tierTot = $fn.tierTot
     totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
-    editions = @($eds)
+    editions = @($eds); survDaily = @($svArr)
     daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
   }
 }
@@ -582,7 +585,7 @@ function FunnelPayload($f) {
     respTot = $f.respTot; respMatch = $f.respMatch
     tierTot = $f.tierTot
     totalRev = $f.totalRev; totalSales = $f.totalSales
-    editions = @($f.editions)
+    editions = @($f.editions); survDaily = @($f.survDaily)
     daily = @($f.daily); grain = @($f.grain)
   }
 }
