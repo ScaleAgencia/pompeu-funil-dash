@@ -402,6 +402,7 @@ function Attribute-Sales($funnels) {
   $tot = 0; $totV = 0.0; $attr = 0; $attrV = 0.0
   $unSrc = @{}   # utm_source -> @{sales;rev} for UNATTRIBUTED sales
   $byYear = @{}  # year -> @{sales;rev} for ALL FDI sales
+  $script:FDI_BUYERS = @{}   # email -> 1 : TODO comprador de FDI (p/ validacao do leadscore)
   foreach ($r in $rows) {
     if ($r.Count -lt 5) { continue }
     if ((Deacc $r[0]) -notlike '*formula dos investimentos*') { continue }
@@ -414,6 +415,7 @@ function Attribute-Sales($funnels) {
     # best lead across both funnels with capture date <= sale date (closest)
     $best = $null
     $ek = $r[2].Trim().ToLowerInvariant()
+    if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) { $script:FDI_BUYERS[$ek] = 1 }
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
         $cands = $fn.emIndex[$ek]
@@ -590,7 +592,44 @@ function FunnelPayload($f) {
   }
 }
 
+# ---- Validacao AUTO do leadscore: quem responde x quem compra FDI --------
+#  Recalcula toda atualizacao (3h): conversao por tier + perfil do comprador.
+#  Escopo = respostas ja maturadas (data <= hoje-4d, deu tempo do webinario/venda).
+function Compute-Validation($surveyFiles, $buyers, $matCut) {
+  $leads = @{}
+  foreach ($f in $surveyFiles) {
+    if (-not (Test-Path $f)) { continue }
+    foreach ($r in (Read-Rows $f)) {
+      if ($r.Count -lt 11) { continue }
+      $sd = if ($r.Count -gt 17) { DKey $r[17] } else { '' }
+      if ($sd -eq '' -or $sd -gt $matCut) { continue }
+      $e = EmKey $r[1]; if ($e -eq '' -or $e.IndexOf('@') -lt 0) { continue }
+      $sc = ScoreOf $r[3] $r[4] $r[5] $r[6] $r[7] $r[8] $r[9] $r[10]
+      if (-not $leads.ContainsKey($e) -or $sc -gt $leads[$e].sc) {
+        $leads[$e] = @{ sc = $sc; idade = $r[3].Trim(); nivel = $r[4].Trim(); valor = $r[5].Trim(); trava = $r[6].Trim(); result = $r[7].Trim(); renda = $r[8].Trim(); cap = $r[9].Trim(); motiv = $r[10].Trim() }
+      }
+    }
+  }
+  $bt = @{ q = @{ n = 0; b = 0 }; m = @{ n = 0; b = 0 }; f = @{ n = 0; b = 0 } }
+  $prof = @{}
+  foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $prof[$dk] = @{} }
+  foreach ($e in $leads.Keys) {
+    $x = $leads[$e]; $t = TierOf $x.sc; $bought = $buyers.ContainsKey($e)
+    $bt[$t].n++; if ($bought) { $bt[$t].b++ }
+    if ($bought) { foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }; if (-not $prof[$dk].ContainsKey($a)) { $prof[$dk][$a] = 0 }; $prof[$dk][$a]++ } }
+  }
+  $profArr = New-Object System.Collections.ArrayList
+  foreach ($dm in $DIMS) {
+    $dk = $dm.key; $top = ''; $topN = 0; $totB = 0
+    foreach ($a in $prof[$dk].Keys) { $totB += $prof[$dk][$a]; if ($prof[$dk][$a] -gt $topN) { $topN = $prof[$dk][$a]; $top = $a } }
+    [void]$profArr.Add(@{ key = $dk; label = $dm.label; top = $top; n = $topN; tot = $totB })
+  }
+  return @{ matCut = $matCut; leads = $leads.Count; buyers = ($bt.q.b + $bt.m.b + $bt.f.b); tier = $bt; profile = @($profArr) }
+}
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
+$matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
+$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv')) $script:FDI_BUYERS $matCut
+Write-Host ("   validacao: {0} leads maturados, {1} compradores | Quente {2}/{3} Morno {4}/{5} Frio {6}/{7}" -f $validation.leads, $validation.buyers, $validation.tier.q.b, $validation.tier.q.n, $validation.tier.m.b, $validation.tier.m.n, $validation.tier.f.b, $validation.tier.f.n)
 $payload = @{
   generatedAt   = (Get-Date).ToUniversalTime().ToString('o')
   generatedAtBR = $nowBR.ToString('dd/MM/yyyy HH:mm')
@@ -600,6 +639,7 @@ $payload = @{
   surveyStart   = $SURVEY_START
   product       = 'Formula dos Investimentos'
   sales         = $salesInfo
+  validation    = $validation
   names         = @{ c = @($CampArr.ToArray()); s = @($SetArr.ToArray()); a = @($AdArr.ToArray()) }
   segunda       = FunnelPayload $seg
   terca         = FunnelPayload $ter

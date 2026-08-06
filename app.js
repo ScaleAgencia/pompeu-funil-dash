@@ -627,6 +627,32 @@
     };
   }
 
+  function validationPanel() {
+    var v = D.validation;
+    if (!v || !v.leads) return '';
+    var q = v.tier.q, m = v.tier.m, f = v.tier.f;
+    var totN = q.n + m.n + f.n, totB = q.b + m.b + f.b;
+    var avg = totN ? totB / totN : 0;
+    function tierCard(nm, x, color) {
+      return '<div class="card kpi"><div class="klabel">' + nm + '</div><div class="kval" style="color:' + color + '">' + fPct(x.n ? x.b / x.n : 0, 1) + '</div><div class="ksub"><span>' + fInt(x.b) + ' de ' + fInt(x.n) + ' compraram</span></div></div>';
+    }
+    var qlift = avg && q.n ? (q.b / q.n) / avg : 0;
+    var head = '<div class="section-title" style="margin-top:6px">✅ Validação do leadscore · cruzamento com vendas do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· automático, atualiza a cada 3h</span><span class="st-line"></span></div>';
+    var note = '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho toda atualização. Base: <b>' + fInt(v.leads) + '</b> leads que responderam e já <b>maturaram</b> (webinário passou), cruzados por e-mail com <b>' + fInt(v.buyers) + '</b> compradores do FDI. Assim dá pra ver semana a semana se o comprador mudou — sem eu precisar recalcular na mão.</div></div>';
+    var cards = '<div class="kpi-row">' +
+      tierCard('🔥 Quente converte', q, 'var(--hot)') +
+      tierCard('🟡 Morno converte', m, 'var(--warm)') +
+      tierCard('❄️ Frio converte', f, 'var(--cold)') +
+      '<div class="card kpi"><div class="klabel">📊 Lift do Quente</div><div class="kval">' + (qlift ? qlift.toFixed(1).replace('.', ',') + '×' : '—') + '</div><div class="ksub"><span>vs média geral ' + fPct(avg, 1) + '</span></div></div>' +
+      '</div>';
+    var pg = '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:12px">🎯 Perfil de quem COMPROU · resposta mais comum entre os ' + fInt(v.buyers) + ' compradores</div><div class="profile-grid">' +
+      arr(v.profile).map(function (p) {
+        if (!p.top) return '';
+        return '<div class="prof-item"><div class="pi-l">' + esc(p.label) + '</div><div class="pi-v">' + esc(p.top) + '</div><div class="pi-p">' + fPct(p.tot ? p.n / p.tot : 0, 0) + ' dos compradores</div></div>';
+      }).join('') + '</div></div>';
+    return head + note + cards + pg;
+  }
+
   function renderPesquisa() {
     var P = D.pesquisa, w = PSTATE, T = pickTier(w);
     var tot = T.t.f + T.t.m + T.t.q || 1;
@@ -665,7 +691,7 @@
     var dims = '<div class="section-title">O que os leads respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(' + labelOf(w) + ')</span><span class="st-line"></span></div>' +
       '<div class="dims-grid">' + arr(P.dims).map(function (dm) { return dimCard(dm, w); }).join('') + '</div>';
 
-    body.innerHTML = summary + strip + prof + dims + ruler();
+    body.innerHTML = validationPanel() + summary + strip + prof + dims + ruler();
   }
   function labelOf(w) { return w === 'segunda' ? 'Segunda-feira' : (w === 'terca' ? 'Terça-feira' : 'Soma dos dois funis'); }
 
