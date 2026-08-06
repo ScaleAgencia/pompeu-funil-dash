@@ -104,19 +104,50 @@
   }
   function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
-  // Tag de ação — foco em LUCRO (ROAS). Campanha fresca (vendas não maturaram) => Maturando.
+  /* ---- janela de DECISÃO = últimas ~5 semanas já maturadas ---- */
+  function decisionWindow(f) {
+    var today = funnelRange(f).hi;
+    var cut = addDays(today, -4);                 // edição madura: webinário (hi+1) + ~3 dias de venda
+    var mat = arr(f.editions).filter(function (e) { return e.hi <= cut; });
+    if (!mat.length) return null;
+    var decHi = mat[mat.length - 1].hi;
+    return { lo: addDays(decHi, -34), hi: decHi };  // ~5 semanas maturadas
+  }
+  function decisionMap(f, plat, w) {
+    var m = {};
+    if (!w) return m;
+    arr(f.grain).forEach(function (g) {
+      if (g.p !== plat || g.d < w.lo || g.d > w.hi) return;
+      var cN = NM.c[g.c], sN = NM.s[g.s], aN = NM.a[g.a];
+      var ks = ['¦' + cN, '¦' + cN + '¦' + sN, '¦' + cN + '¦' + sN + '¦' + aN];
+      ks.forEach(function (k) { var o = m[k] || (m[k] = { sp: 0, rev: 0, sales: 0 }); o.sp += g.sp; o.rev += g.rev || 0; o.sales += g.sales || 0; });
+    });
+    return m;
+  }
+  function attachDecision(list, dm, parentPath) {
+    list.forEach(function (n) {
+      var path = parentPath + '¦' + n.name;
+      n.dr = dm[path] && dm[path].sp > 0 ? dm[path] : null;
+      if (n.children && n.children.length) attachDecision(n.children, dm, path);
+    });
+  }
+  // ROAS de decisão: usa o período se ele já maturou; senão cai pras últimas semanas maturadas
+  function nodeRoas(n) {
+    if (n.matFrac >= 0.4 && n.spMat > 0) return { roas: n.rev / n.spMat, sp: n.spMat, rev: n.rev, sales: n.sales, src: 'p' };
+    if (n.dr) return { roas: n.dr.rev / n.dr.sp, sp: n.dr.sp, rev: n.dr.rev, sales: n.dr.sales, src: 'd' };
+    return null;
+  }
+  // Tag de ação — foco em LUCRO (ROAS das últimas semanas maturadas). Sem histórico => Maturando.
   function tagOf(n) {
     if (n.sp <= 0) return null;
-    if (n.ld === 0) return { c: 'pausar', t: 'Pausar' };            // gastou e não captou lead
-    if (n.matFrac < 0.4) return { c: 'matur', t: '🕐 Maturando' };  // gasto recente: vendas ainda não caíram
-    if (n.sp < 40) return { c: 'insuf', t: 'Dado insuf.' };         // gasto baixo demais p/ concluir
-    var r = n.roasMat;
-    if (r == null || r < 0.4) return { c: 'pausar', t: 'Pausar' };  // queima dinheiro (ROAS < 0,4)
+    var d = nodeRoas(n);
+    if (!d || d.sp < 40) return { c: 'matur', t: '🕐 Maturando' };  // campanha nova / sem venda maturada
+    var r = d.roas;
+    if (r == null || r < 0.4) return { c: 'pausar', t: 'Pausar' };  // queima dinheiro
     if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };          // paga o tráfego -> escalar
     if (r >= 0.7) return { c: 'manter', t: 'Manter' };
     return { c: 'revisar', t: 'Revisar' };                          // ROAS 0,4–0,7 fraco
   }
-  // quantos descendentes (conjunto/anúncio) estão numa dada tag — pra sinalizar na campanha
   function countTag(n, cls) {
     var c = 0;
     if (n.children) n.children.forEach(function (ch) {
@@ -257,6 +288,7 @@
       (showScore ? scoreStrip(a) : coverageBanner()) +
       chartsBlock(key) +
       '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:14px">💰 <div><b>Ação e ROAS</b> = lucro real das <b>últimas ~5 semanas já maturadas</b> (otimize a semana atual pelo resultado das anteriores). <b>Acelerar</b> ROAS ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4 · 🕐 <b>Maturando</b> = campanha nova, ainda sem venda. Investimento/Leads/CPL seguem o período selecionado.</div></div>' +
       '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
     drawCharts(key, a);
     wireTrees(key);
@@ -348,9 +380,11 @@
   function optCol(f, plat, lo, hi) {
     MAT_CUTOFF = addDays(funnelRange(f).hi, -9);   // leads ate 9 dias atras ja tiveram webinario
     var list = buildTree(f, plat, lo, hi);
-    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.rev += n.rev; o.sales += n.sales; o.ld += n.ld; return o; }, { sp: 0, rev: 0, sales: 0, ld: 0 });
+    var dw = decisionWindow(f);                    // últimas ~5 semanas maturadas
+    attachDecision(list, decisionMap(f, plat, dw), '');
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; var d = nodeRoas(n); if (d) { o.dsp += d.sp; o.rev += d.rev; o.sales += d.sales; } return o; }, { sp: 0, ld: 0, dsp: 0, rev: 0, sales: 0 });
     var cpl = tot.ld ? tot.sp / tot.ld : null;
-    var roas = tot.sp ? tot.rev / tot.sp : null;
+    var roas = tot.dsp ? tot.rev / tot.dsp : null;   // ROAS maduro (base de decisão)
     var medCpl = median(list.filter(function (n) { return n.sp > 0 && n.ld >= 1; }).map(function (n) { return n.cpl; }));
     var nmeP = plat === 'g' ? 'Google Ads' : 'Meta Ads';
     var sub = plat === 'g' ? 'campanha › grupo › anúncio · sem imposto' : 'campanha › conjunto › anúncio · imposto ×1,1385';
@@ -369,8 +403,8 @@
     return '<div class="opt-col ' + plat + '">' +
       '<div class="opt-head"><div class="oh-ic">' + (plat === 'g' ? 'G' : 'M') + '</div><div><h3>' + nmeP + '</h3><div class="oh-sub">' + sub + '</div></div></div>' +
       '<div class="opt-totals">' +
-      ot('Investimento', fBRL0(tot.sp)) + ot('Receita', fBRL0(tot.rev)) + ot('ROAS', roas == null ? '—' : fRoas(roas)) +
-      ot('Vendas', fInt(tot.sales)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+      ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+      ot('ROAS maduro', roas == null ? '—' : fRoas(roas)) + ot('Receita mad.', fBRL0(tot.rev)) + ot('Vendas mad.', fInt(tot.sales)) +
       '</div>' +
       '<div class="tree">' +
       '<div class="tr-row head">' +
@@ -393,7 +427,7 @@
     if (sk === 'name') return n.name;
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
-    if (sk === 'roas') return (n.roasMat != null ? n.roasMat : n.roas);   // null -> fim
+    if (sk === 'roas') { var dr = nodeRoas(n); return dr ? dr.roas : null; }   // null -> fim
     if (sk === 'cpl') return n.cpl;               // null (sem leads) -> vai pro fim
     if (sk === 'acao') { var t = tagOf(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
@@ -426,13 +460,14 @@
     var pausarN = hasKids ? countTag(n, 'pausar') : 0;
     var cplc = cplColor(n.cpl, medCpl);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
-    var rv = (n.roasMat != null ? n.roasMat : n.roas);
-    var fresh = (n.matFrac != null && n.matFrac < 0.4 && n.sp > 0);
-    var ttl = 'Investido ' + fBRL0(n.sp) + ' · Receita ' + fBRL0(n.rev) + ' · ' + fInt(n.sales) + ' vendas' + (rv != null ? ' · ROAS ' + fRoas(rv) : '') + (fresh ? ' · vendas ainda maturando' : '') + ' · ' + fInt(n.ld) + ' leads';
-    var rcell = fresh
-      ? '<span class="qc muted" title="vendas ainda não maturaram">🕐</span><div class="qsub">' + fInt(n.sales) + 'v</div>'
-      : (n.sp > 0
-        ? '<span class="qc" style="color:' + roasColor(rv) + ';font-weight:700">' + (rv == null ? '—' : fRoas(rv)) + '</span><div class="qsub">' + fInt(n.sales) + 'v · ' + fBRL0(n.rev) + '</div>'
+    var d = nodeRoas(n);
+    var rv = d ? d.roas : null;
+    var noHist = (n.sp > 0 && !d);
+    var ttl = 'Investido(período) ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads' + (d ? ' · ROAS maduro ' + fRoas(rv) + ' (' + fInt(d.sales) + ' vendas · ' + fBRL0(d.rev) + ')' : ' · sem venda maturada ainda');
+    var rcell = noHist
+      ? '<span class="qc muted" title="campanha nova / sem venda maturada">🕐</span>'
+      : (d
+        ? '<span class="qc" style="color:' + roasColor(rv) + ';font-weight:700">' + fRoas(rv) + '</span><div class="qsub">' + fInt(d.sales) + 'v · ' + fBRL0(d.rev) + '</div>'
         : '<span class="qc muted">' + fInt(n.sales) + 'v</span>');
     var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
