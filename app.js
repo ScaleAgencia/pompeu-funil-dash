@@ -84,39 +84,53 @@
     list.sort(function (a, b) { return b.sp - a.sp; });
     return list;
   }
-  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, kids: {} }; }
-  function accN(n, g) { n.sp += g.sp; if (g.d >= D.surveyStart) n.qsp += g.sp; n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q; }
+  var MAT_CUTOFF = '';  // datas de lead <= isto ja tiveram webinario (vendas maturaram)
+  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, kids: {} }; }
+  function accN(n, g) {
+    n.sp += g.sp; if (g.d >= D.surveyStart) n.qsp += g.sp; if (g.d <= MAT_CUTOFF) n.spMat += g.sp;
+    n.rev += g.rev || 0; n.sales += g.sales || 0;
+    n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q;
+  }
   function finalize(n) {
     n.children = Object.keys(n.kids).map(function (k) { return finalize(n.kids[k]); });
     n.children.sort(function (a, b) { return b.sp - a.sp; });
     n.kids = null;
     n.cpl = n.ld ? n.sp / n.ld : null;
-    n.cplQ = n.q ? n.qsp / n.q : null;  // CPL qualificado uses survey-era spend (aligned with qualified counts)
+    n.cplQ = n.q ? n.qsp / n.q : null;
+    n.roas = n.sp ? n.rev / n.sp : null;
+    n.roasMat = n.spMat ? n.rev / n.spMat : null;      // ROAS julgando só o gasto ja maturado (justo)
+    n.matFrac = n.sp ? n.spMat / n.sp : 0;             // fração do gasto que ja pôde converter
     return n;
   }
   function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
-  // Tag de ação — foco em CPL BARATO (objetivo atual). Barato => Acelerar, muito caro => Pausar.
-  function tagOf(n, medCpl) {
+  // Tag de ação — foco em LUCRO (ROAS). Campanha fresca (vendas não maturaram) => Maturando.
+  function tagOf(n) {
     if (n.sp <= 0) return null;
-    if (n.ld === 0) return { c: 'pausar', t: 'Pausar' };          // gastou e não captou lead
-    if (n.ld < 15) return { c: 'insuf', t: 'Dado insuf.' };       // volume baixo p/ concluir
-    if (medCpl) {
-      if (n.cpl <= 0.8 * medCpl) return { c: 'acelerar', t: 'Acelerar' };   // CPL barato
-      if (n.cpl >= 1.8 * medCpl) return { c: 'pausar', t: 'Pausar' };       // CPL muito caro
-      if (n.cpl >= 1.35 * medCpl) return { c: 'revisar', t: 'Revisar' };    // CPL caro
-    }
-    return { c: 'manter', t: 'Manter' };
+    if (n.ld === 0) return { c: 'pausar', t: 'Pausar' };            // gastou e não captou lead
+    if (n.matFrac < 0.4) return { c: 'matur', t: '🕐 Maturando' };  // gasto recente: vendas ainda não caíram
+    if (n.sp < 40) return { c: 'insuf', t: 'Dado insuf.' };         // gasto baixo demais p/ concluir
+    var r = n.roasMat;
+    if (r == null || r < 0.4) return { c: 'pausar', t: 'Pausar' };  // queima dinheiro (ROAS < 0,4)
+    if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };          // paga o tráfego -> escalar
+    if (r >= 0.7) return { c: 'manter', t: 'Manter' };
+    return { c: 'revisar', t: 'Revisar' };                          // ROAS 0,4–0,7 fraco
   }
   // quantos descendentes (conjunto/anúncio) estão numa dada tag — pra sinalizar na campanha
-  function countTag(n, medCpl, cls) {
+  function countTag(n, cls) {
     var c = 0;
     if (n.children) n.children.forEach(function (ch) {
-      var t = tagOf(ch, medCpl);
+      var t = tagOf(ch);
       if (t && t.c === cls) c++;
-      c += countTag(ch, medCpl, cls);
+      c += countTag(ch, cls);
     });
     return c;
+  }
+  function roasColor(r) {
+    if (r == null) return 'var(--muted)';
+    if (r >= 1.0) return 'var(--teal)';
+    if (r >= 0.5) return 'var(--gold)';
+    return 'var(--red)';
   }
   function cplColor(cpl, med) {
     if (cpl == null || !med) return 'var(--muted)';
@@ -332,10 +346,11 @@
   /* ---------- optimization column ---------- */
   var TREE_STATE = {}; // key_plat -> Set of expanded paths
   function optCol(f, plat, lo, hi) {
+    MAT_CUTOFF = addDays(funnelRange(f).hi, -9);   // leads ate 9 dias atras ja tiveram webinario
     var list = buildTree(f, plat, lo, hi);
-    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.qsp += n.qsp; o.ld += n.ld; o.q += n.q; o.rs += n.rs; return o; }, { sp: 0, qsp: 0, ld: 0, q: 0, rs: 0 });
-    var cpl = tot.ld ? tot.sp / tot.ld : null, cplQ = tot.q ? tot.qsp / tot.q : null;
-    var medQ = median(list.filter(function (n) { return n.q >= 1; }).map(function (n) { return n.cplQ; }));
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.rev += n.rev; o.sales += n.sales; o.ld += n.ld; return o; }, { sp: 0, rev: 0, sales: 0, ld: 0 });
+    var cpl = tot.ld ? tot.sp / tot.ld : null;
+    var roas = tot.sp ? tot.rev / tot.sp : null;
     var medCpl = median(list.filter(function (n) { return n.sp > 0 && n.ld >= 1; }).map(function (n) { return n.cpl; }));
     var nmeP = plat === 'g' ? 'Google Ads' : 'Meta Ads';
     var sub = plat === 'g' ? 'campanha › grupo › anúncio · sem imposto' : 'campanha › conjunto › anúncio · imposto ×1,1385';
@@ -343,19 +358,19 @@
     var noSp = list.filter(function (n) { return n.sp <= 0; });
     var sortKey = f.key + '_' + plat;
     var so = SORT_STATE[sortKey] || { sk: 'sp', dir: -1 };
-    sortTree(withSp, so.sk, so.dir, medCpl);
-    var rows = withSp.map(function (c) { return treeRows(c, plat, f.key, medQ, medCpl, '', true); }).join('');
+    sortTree(withSp, so.sk, so.dir);
+    var rows = withSp.map(function (c) { return treeRows(c, plat, f.key, medCpl, '', true); }).join('');
     if (noSp.length) {
-      var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, children: [], cpl: null, cplQ: null };
-      noSp.forEach(function (n) { orph.ld += n.ld; orph.rs += n.rs; orph.f += n.f; orph.m += n.m; orph.q += n.q; });
-      if (orph.ld > 0) rows += treeRows(orph, plat, f.key, null, null, '', true);
+      var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rev: 0, sales: 0, matFrac: 1, children: [], cpl: null, roas: null, roasMat: null };
+      noSp.forEach(function (n) { orph.ld += n.ld; orph.rev += n.rev; orph.sales += n.sales; });
+      if (orph.ld > 0) rows += treeRows(orph, plat, f.key, null, '', true);
     }
     if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
     return '<div class="opt-col ' + plat + '">' +
       '<div class="opt-head"><div class="oh-ic">' + (plat === 'g' ? 'G' : 'M') + '</div><div><h3>' + nmeP + '</h3><div class="oh-sub">' + sub + '</div></div></div>' +
       '<div class="opt-totals">' +
-      ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
-      ot('Qualificados', fInt(tot.q)) + ot('CPL qualif.', money(cplQ)) + ot('Respostas', fInt(tot.rs)) +
+      ot('Investimento', fBRL0(tot.sp)) + ot('Receita', fBRL0(tot.rev)) + ot('ROAS', roas == null ? '—' : fRoas(roas)) +
+      ot('Vendas', fInt(tot.sales)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
       '</div>' +
       '<div class="tree">' +
       '<div class="tr-row head">' +
@@ -363,7 +378,7 @@
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
       sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
-      sHead(sortKey, so, 'q', 'Qualif.', 'tr-num') +
+      sHead(sortKey, so, 'roas', 'ROAS', 'tr-num') +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num') +
       '</div>' +
       rows + '</div></div>';
@@ -372,27 +387,27 @@
 
   /* ---------- sortable tree headers ---------- */
   var SORT_STATE = {}; // fk_plat -> {sk, dir}  (dir: 1 asc, -1 desc)
-  var ACT_RANK = { acelerar: 0, manter: 1, revisar: 2, insuf: 3, pausar: 4 };
-  function bestDir(sk) { return (sk === 'cpl' || sk === 'name' || sk === 'acao') ? 1 : -1; } // 1º clique = melhor→pior
-  function sortVal(n, sk, medCpl) {
+  var ACT_RANK = { acelerar: 0, manter: 1, revisar: 2, matur: 3, insuf: 4, pausar: 5 };
+  function bestDir(sk) { return (sk === 'cpl' || sk === 'name' || sk === 'acao') ? 1 : -1; } // 1º clique = melhor→pior (cpl/ação sobe; roas/leads/invest desce)
+  function sortVal(n, sk) {
     if (sk === 'name') return n.name;
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
-    if (sk === 'q') return n.q;
+    if (sk === 'roas') return (n.roasMat != null ? n.roasMat : n.roas);   // null -> fim
     if (sk === 'cpl') return n.cpl;               // null (sem leads) -> vai pro fim
-    if (sk === 'acao') { var t = tagOf(n, medCpl); return t ? ACT_RANK[t.c] : 9; }
+    if (sk === 'acao') { var t = tagOf(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
   }
-  function sortTree(list, sk, dir, medCpl) {
+  function sortTree(list, sk, dir) {
     list.sort(function (a, b) {
-      var va = sortVal(a, sk, medCpl), vb = sortVal(b, sk, medCpl);
+      var va = sortVal(a, sk), vb = sortVal(b, sk);
       if (va == null && vb == null) return 0;
       if (va == null) return 1;                   // nulos sempre por último
       if (vb == null) return -1;
       if (sk === 'name') return va.localeCompare(vb) * dir;
       return (va - vb) * dir;
     });
-    list.forEach(function (n) { if (n.children && n.children.length) sortTree(n.children, sk, dir, medCpl); });
+    list.forEach(function (n) { if (n.children && n.children.length) sortTree(n.children, sk, dir); });
   }
   function sHead(sortKey, so, sk, lab, cls) {
     var active = so.sk === sk;
@@ -400,34 +415,38 @@
     return '<div class="' + cls + ' sortable' + (active ? ' sorted' : '') + '" data-sk="' + sk + '" data-sortk="' + sortKey + '" title="Ordenar por ' + lab + '">' + lab + arrow + '</div>';
   }
 
-  function treeRows(n, plat, fk, medQ, medCpl, parentPath, visible) {
+  function treeRows(n, plat, fk, medCpl, parentPath, visible) {
     var path = parentPath + '¦' + n.name;
     var skey = fk + '_' + plat;
     var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
-    var tag = tagOf(n, medCpl);
-    var accelN = hasKids ? countTag(n, medCpl, 'acelerar') : 0;
-    var pausarN = hasKids ? countTag(n, medCpl, 'pausar') : 0;
+    var tag = tagOf(n);
+    var accelN = hasKids ? countTag(n, 'acelerar') : 0;
+    var pausarN = hasKids ? countTag(n, 'pausar') : 0;
     var cplc = cplColor(n.cpl, medCpl);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
-    var ttl = 'Leads ' + fInt(n.ld) + ' · Frio ' + n.f + ' · Morno ' + n.m + ' · Quente ' + n.q + (n.q > 0 ? ' · CPL qualif. ' + fBRL(n.cplQ) : '') + (n.rs > 0 ? ' · ' + n.rs + ' respostas' : '');
-    var qcell = n.q > 0
-      ? '<span class="qc has">' + fInt(n.q) + '</span><div class="qsub">' + fBRL0(n.cplQ) + '</div>'
-      : '<span class="qc muted">' + (n.rs > 0 ? '0' : '—') + '</span>';
+    var rv = (n.roasMat != null ? n.roasMat : n.roas);
+    var fresh = (n.matFrac != null && n.matFrac < 0.4 && n.sp > 0);
+    var ttl = 'Investido ' + fBRL0(n.sp) + ' · Receita ' + fBRL0(n.rev) + ' · ' + fInt(n.sales) + ' vendas' + (rv != null ? ' · ROAS ' + fRoas(rv) : '') + (fresh ? ' · vendas ainda maturando' : '') + ' · ' + fInt(n.ld) + ' leads';
+    var rcell = fresh
+      ? '<span class="qc muted" title="vendas ainda não maturaram">🕐</span><div class="qsub">' + fInt(n.sales) + 'v</div>'
+      : (n.sp > 0
+        ? '<span class="qc" style="color:' + roasColor(rv) + ';font-weight:700">' + (rv == null ? '—' : fRoas(rv)) + '</span><div class="qsub">' + fInt(n.sales) + 'v · ' + fBRL0(n.rev) + '</div>'
+        : '<span class="qc muted">' + fInt(n.sales) + 'v</span>');
     var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
-      '<div class="tr-num tr-q">' + qcell + '</div>' +
+      '<div class="tr-num tr-q">' + rcell + '</div>' +
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
-        (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' conjunto(s)/anúncio(s) com CPL barato pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
-        (pausarN > 0 && (!tag || tag.c !== 'pausar') ? '<span class="pausar-mark" title="' + pausarN + ' conjunto(s)/anúncio(s) com CPL muito caro (ou sem lead) pra pausar aqui dentro — clique pra abrir">⏸ Pausar</span>' : '') +
+        (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' conjunto(s)/anúncio(s) LUCRANDO (ROAS bom) pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
+        (pausarN > 0 && (!tag || tag.c !== 'pausar') ? '<span class="pausar-mark" title="' + pausarN + ' conjunto(s)/anúncio(s) no prejuízo (ROAS baixo) pra pausar aqui dentro — clique pra abrir">⏸ Pausar</span>' : '') +
       '</div>' +
       '</div>';
     var kids = '';
-    if (hasKids && open) kids = n.children.map(function (c) { return treeRows(c, plat, fk, medQ, medCpl, path, true); }).join('');
+    if (hasKids && open) kids = n.children.map(function (c) { return treeRows(c, plat, fk, medCpl, path, true); }).join('');
     return row + kids;
   }
   function wireTrees(key) {
