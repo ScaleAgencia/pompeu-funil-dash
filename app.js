@@ -85,6 +85,7 @@
     return list;
   }
   var MAT_CUTOFF = '';  // datas de lead <= isto ja tiveram webinario (vendas maturaram)
+  var MEDQ = null;      // mediana do CPL-qualificado (Morno+Quente) do funil/plataforma em render
   function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, kids: {} }; }
   function accN(n, g) {
     n.sp += g.sp; if (g.d >= D.surveyStart) n.qsp += g.sp; if (g.d <= MAT_CUTOFF) n.spMat += g.sp;
@@ -96,7 +97,8 @@
     n.children.sort(function (a, b) { return b.sp - a.sp; });
     n.kids = null;
     n.cpl = n.ld ? n.sp / n.ld : null;
-    n.cplQ = n.q ? n.qsp / n.q : null;
+    n.qual = n.m + n.q;                                 // Qualificado = Morno + Quente (faixa que traz ~97% das vendas)
+    n.cplQ = n.qual ? n.qsp / n.qual : null;            // CPL por lead qualificado (M+Q), gasto desde o inicio da pesquisa
     n.roas = n.sp ? n.rev / n.sp : null;
     n.roasMat = n.spMat ? n.rev / n.spMat : null;      // ROAS julgando só o gasto ja maturado (justo)
     n.matFrac = n.sp ? n.spMat / n.sp : 0;             // fração do gasto que ja pôde converter
@@ -137,16 +139,25 @@
     if (n.dr) return { roas: n.dr.rev / n.dr.sp, sp: n.dr.sp, rev: n.dr.rev, sales: n.dr.sales, src: 'd' };
     return null;
   }
-  // Tag de ação — foco em LUCRO (ROAS das últimas semanas maturadas). Sem histórico => Maturando.
+  // Tag de ação — LUCRO + eficiência. Regra: se já há ROAS maturado, o lucro manda (e o CPL
+  // qualificado desempata o meio-termo); na semana fresca (sem venda ainda) decide pelo CPL qualificado.
   function tagOf(n) {
     if (n.sp <= 0) return null;
     var d = nodeRoas(n);
-    if (!d || d.sp < 40) return { c: 'matur', t: '🕐 Maturando' };  // campanha nova / sem venda maturada
-    var r = d.roas;
-    if (r == null || r < 0.4) return { c: 'pausar', t: 'Pausar' };  // queima dinheiro
-    if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };          // paga o tráfego -> escalar
-    if (r >= 0.7) return { c: 'manter', t: 'Manter' };
-    return { c: 'revisar', t: 'Revisar' };                          // ROAS 0,4–0,7 fraco
+    var cq = n.cplQ;
+    var cheap = (cq != null && MEDQ) ? (cq <= 0.85 * MEDQ) : false;   // barato p/ captar qualificado (M+Q)
+    var pricey = (cq != null && MEDQ) ? (cq >= 1.35 * MEDQ) : false;  // caro p/ captar qualificado
+    if (d && d.sp >= 40) {                          // já temos ROAS maturado -> lucro é a verdade
+      var r = d.roas;
+      if (r < 0.4) return { c: 'pausar', t: 'Pausar' };              // queima dinheiro
+      if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };         // paga o tráfego -> escalar
+      if (r >= 0.7) return cheap ? { c: 'acelerar', t: 'Acelerar' } : { c: 'manter', t: 'Manter' };
+      return pricey ? { c: 'pausar', t: 'Pausar' } : { c: 'revisar', t: 'Revisar' };  // ROAS 0,4–0,7
+    }
+    // semana fresca / sem venda maturada -> usa o CPL qualificado como sinal antecipado de lucro
+    if (cheap) return { c: 'acelerar', t: 'Acelerar' };
+    if (pricey) return { c: 'revisar', t: 'Revisar' };
+    return { c: 'matur', t: '🕐 Maturando' };
   }
   function countTag(n, cls) {
     var c = 0;
@@ -288,7 +299,7 @@
       (showScore ? scoreStrip(a) : coverageBanner()) +
       chartsBlock(key) +
       '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:14px">💰 <div><b>Ação e ROAS</b> = lucro real das <b>últimas ~5 semanas já maturadas</b> (otimize a semana atual pelo resultado das anteriores). <b>Acelerar</b> ROAS ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4 · 🕐 <b>Maturando</b> = campanha nova, ainda sem venda. Investimento/Leads/CPL seguem o período selecionado.</div></div>' +
+      '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, com <b>2 sinais</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) e <b>CPL qualificado</b> (custo por lead <b>Morno+Quente</b> — a faixa que traz ~97% das vendas do FDI; Frio converte só 0,6% e fica de fora). <b>Ação:</b> onde já há ROAS maduro, o lucro manda (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); na semana fresca sem venda, decide pelo CPL qualificado (barato → Acelerar, caro → Revisar, senão 🕐 <b>Maturando</b>). CPL qualif. colorido vs. a mediana do funil. Investimento/Leads/CPL seguem o período.</div></div>' +
       '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
     drawCharts(key, a);
     wireTrees(key);
@@ -382,10 +393,12 @@
     var list = buildTree(f, plat, lo, hi);
     var dw = decisionWindow(f);                    // últimas ~5 semanas maturadas
     attachDecision(list, decisionMap(f, plat, dw), '');
-    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; var d = nodeRoas(n); if (d) { o.dsp += d.sp; o.rev += d.rev; o.sales += d.sales; } return o; }, { sp: 0, ld: 0, dsp: 0, rev: 0, sales: 0 });
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.qsp += n.qsp; o.qual += (n.qual || 0); var d = nodeRoas(n); if (d) { o.dsp += d.sp; o.rev += d.rev; o.sales += d.sales; } return o; }, { sp: 0, ld: 0, qsp: 0, qual: 0, dsp: 0, rev: 0, sales: 0 });
     var cpl = tot.ld ? tot.sp / tot.ld : null;
+    var cplQt = tot.qual ? tot.qsp / tot.qual : null;   // CPL qualificado (M+Q) do total
     var roas = tot.dsp ? tot.rev / tot.dsp : null;   // ROAS maduro (base de decisão)
     var medCpl = median(list.filter(function (n) { return n.sp > 0 && n.ld >= 1; }).map(function (n) { return n.cpl; }));
+    MEDQ = median(list.filter(function (n) { return n.cplQ != null && (n.m + n.q) >= 3; }).map(function (n) { return n.cplQ; }));
     var nmeP = plat === 'g' ? 'Google Ads' : 'Meta Ads';
     var sub = plat === 'g' ? 'campanha › grupo › anúncio · sem imposto' : 'campanha › conjunto › anúncio · imposto ×1,1385';
     var withSp = list.filter(function (n) { return n.sp > 0; });
@@ -403,7 +416,7 @@
     return '<div class="opt-col ' + plat + '">' +
       '<div class="opt-head"><div class="oh-ic">' + (plat === 'g' ? 'G' : 'M') + '</div><div><h3>' + nmeP + '</h3><div class="oh-sub">' + sub + '</div></div></div>' +
       '<div class="opt-totals">' +
-      ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+      ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) + ot('CPL qualif.', money(cplQt)) +
       ot('ROAS maduro', roas == null ? '—' : fRoas(roas)) + ot('Receita mad.', fBRL0(tot.rev)) + ot('Vendas mad.', fInt(tot.sales)) +
       '</div>' +
       '<div class="tree">' +
@@ -411,7 +424,7 @@
       sHead(sortKey, so, 'name', 'Campanha / conjunto / anúncio', 'tr-name') +
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
-      sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
+      sHead(sortKey, so, 'cpl', 'CPL-Q', 'tr-num') +
       sHead(sortKey, so, 'roas', 'ROAS', 'tr-num') +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num') +
       '</div>' +
@@ -428,7 +441,7 @@
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
     if (sk === 'roas') { var dr = nodeRoas(n); return dr ? dr.roas : null; }   // null -> fim
-    if (sk === 'cpl') return n.cpl;               // null (sem leads) -> vai pro fim
+    if (sk === 'cpl') return n.cplQ;              // CPL qualificado (M+Q); null -> vai pro fim
     if (sk === 'acao') { var t = tagOf(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
   }
@@ -458,12 +471,12 @@
     var tag = tagOf(n);
     var accelN = hasKids ? countTag(n, 'acelerar') : 0;
     var pausarN = hasKids ? countTag(n, 'pausar') : 0;
-    var cplc = cplColor(n.cpl, medCpl);
+    var cplc = cplColor(n.cplQ, MEDQ);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
     var d = nodeRoas(n);
     var rv = d ? d.roas : null;
     var noHist = (n.sp > 0 && !d);
-    var ttl = 'Investido(período) ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads' + (d ? ' · ROAS maduro ' + fRoas(rv) + ' (' + fInt(d.sales) + ' vendas · ' + fBRL0(d.rev) + ')' : ' · sem venda maturada ainda');
+    var ttl = 'Investido(período) ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads' + (n.qual ? ' · ' + fInt(n.qual) + ' qualif.(M+Q) · CPL qualif. ' + fBRL(n.cplQ) : '') + (d ? ' · ROAS maduro ' + fRoas(rv) + ' (' + fInt(d.sales) + ' vendas · ' + fBRL0(d.rev) + ')' : ' · sem venda maturada ainda');
     var rcell = noHist
       ? '<span class="qc muted" title="campanha nova / sem venda maturada">🕐</span>'
       : (d
@@ -473,7 +486,7 @@
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
-      '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
+      '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cplQ == null ? '—' : fBRL(n.cplQ)) + '</span></div>' +
       '<div class="tr-num tr-q">' + rcell + '</div>' +
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
         (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' conjunto(s)/anúncio(s) LUCRANDO (ROAS bom) pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
