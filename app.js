@@ -500,7 +500,7 @@
     var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
-      '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
+      '<div class="tr-num"><span class="muted">' + fInt(n.ld) + '</span>' + (n.cpl != null ? '<div class="qsub">' + fBRL(n.cpl) + '/ld</div>' : '') + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpvE == null ? '—' : fBRL(n.cpvE)) + '</span></div>' +
       '<div class="tr-num tr-q">' + rcell + '</div>' +
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
