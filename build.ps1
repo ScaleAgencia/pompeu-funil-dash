@@ -16,7 +16,8 @@ $MORNO_MIN  = 5           # 5..10 => Morno ; 0..4 => Frio
 $SURVEY_START = '2026-07-10'
 
 $LID = '1uRdsI3QhyvbRT7Q0sZa8y9DiFWOt8yaY68F134zrO20'   # leads + pesquisa
-$QID = '1RlFtbOJq4LUS8nc3MrR6C9-dvYA5-mSVpVQsHcPGNEE'   # queries
+$QID = '1RlFtbOJq4LUS8nc3MrR6C9-dvYA5-mSVpVQsHcPGNEE'   # queries (segunda/terca)
+$QID_DIARIO = '1OehemfZnZRYAs2l2XyzGORU1CExXAs7OIutn98ZdCd0'  # queries WBN DIARIO (Meta only)
 
 # tab gids
 $G_LEADS_TERCA = 0
@@ -27,6 +28,10 @@ $G_META_TERCA  = 0
 $G_GOOG_TERCA  = 837001685
 $G_META_SEG    = 1484394087
 $G_GOOG_SEG    = 968000625
+# --- Webinar DIARIO (funil novo, Meta only) ---
+$G_META_DIARIO  = 0            # aba "Queries | WBN DIARIO" (col order: Day,Campaign,Ad,AdSet,...)
+$G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO)
+$G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -217,25 +222,26 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false) {
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
-  $fMeta = Get-Csv $QID $gMeta "$key`_meta"
-  $fGoog = Get-Csv $QID $gGoog "$key`_goog"
-  $fLead = Get-Csv $LID $gLeads "$key`_leads"
-  $fPesq = Get-Csv $LID $gPesq "$key`_pesq"
+  $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
+  $fGoog = if ($null -ne $gGoog) { Get-Csv $QID $gGoog "$key`_goog" } else { $null }
+  $fLead = Get-Csv $leadsId $gLeads "$key`_leads"
+  $fPesq = Get-Csv $leadsId $gPesq "$key`_pesq"
   Write-Host ("   [{0:n1}s] downloaded" -f $T.Elapsed.TotalSeconds)
 
   $grain = NewGrain
 
-  # ---- META queries : Day,Campaign,AdSet,Ad,Spent,Impr,Reach,Clicks,Leads,LPV
+  # ---- META queries. Default col order: Day,Campaign,AdSet,Ad,Spent,Impr,Reach,Clicks,Leads,LPV
+  #      DIARIO troca Ad<->AdSet: Day,Campaign,Ad,AdSet,... -> $metaAdBeforeSet
   $rows = Read-Rows $fMeta
   foreach ($r in $rows) {
     if ($r.Count -lt 6) { continue }
     $d = DKey $r[0]; if ($d -eq '') { continue }
     $ci = Intern $CampArr $CampMap ($r[1].Trim())
-    $si = Intern $SetArr  $SetMap  ($r[2].Trim())
-    $ai = Intern $AdArr   $AdMap   ($r[3].Trim())
+    if ($metaAdBeforeSet) { $ai = Intern $AdArr $AdMap ($r[2].Trim()); $si = Intern $SetArr $SetMap ($r[3].Trim()) }
+    else                  { $si = Intern $SetArr $SetMap ($r[2].Trim()); $ai = Intern $AdArr $AdMap ($r[3].Trim()) }
     $n = GNode $grain $d 'm' $ci $si $ai
     $n.sp += (PNum $r[4]) * $TAX
     $n.im += (PNum $r[5])
@@ -244,19 +250,21 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     if ($r.Count -gt 8) { $n.px += (PNum $r[8]) }
     if ($r.Count -gt 9) { $n.lp += (PNum $r[9]) }
   }
-  # ---- GOOGLE queries : Day,Campaign,AdGroup,Ad,Cost,Impr,Clicks,Conversions
-  $rows = Read-Rows $fGoog
-  foreach ($r in $rows) {
-    if ($r.Count -lt 5) { continue }
-    $d = DKey $r[0]; if ($d -eq '') { continue }
-    $ci = Intern $CampArr $CampMap ($r[1].Trim())
-    $si = Intern $SetArr  $SetMap  ($r[2].Trim())
-    $ai = Intern $AdArr   $AdMap   ($r[3].Trim())
-    $n = GNode $grain $d 'g' $ci $si $ai
-    $n.sp += (PNum $r[4])          # google: no tax
-    $n.im += (PNum $r[5])
-    if ($r.Count -gt 6) { $n.ck += (PNum $r[6]) }
-    if ($r.Count -gt 7) { $n.px += (PNum $r[7]) }
+  # ---- GOOGLE queries : Day,Campaign,AdGroup,Ad,Cost,Impr,Clicks,Conversions (pulado se $gGoog nulo)
+  if ($null -ne $fGoog) {
+    $rows = Read-Rows $fGoog
+    foreach ($r in $rows) {
+      if ($r.Count -lt 5) { continue }
+      $d = DKey $r[0]; if ($d -eq '') { continue }
+      $ci = Intern $CampArr $CampMap ($r[1].Trim())
+      $si = Intern $SetArr  $SetMap  ($r[2].Trim())
+      $ai = Intern $AdArr   $AdMap   ($r[3].Trim())
+      $n = GNode $grain $d 'g' $ci $si $ai
+      $n.sp += (PNum $r[4])          # google: no tax
+      $n.im += (PNum $r[5])
+      if ($r.Count -gt 6) { $n.ck += (PNum $r[6]) }
+      if ($r.Count -gt 7) { $n.px += (PNum $r[7]) }
+    }
   }
   Write-Host ("   [{0:n1}s] queries parsed" -f $T.Elapsed.TotalSeconds)
 
@@ -276,8 +284,10 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     if ($r.Count -lt 10) { continue }
     $tag = $r[3]
     if (-not $tag.StartsWith($tagPfx)) { continue }
-    if ($tag.Length -le $pfxLen) { continue }
-    $c0 = $tag[$pfxLen]; if ($c0 -lt '0' -or $c0 -gt '9') { continue }
+    if ($tagMode -eq 'num') {                          # tags numeradas (L1..,S1..): exige digito apos o prefixo
+      if ($tag.Length -le $pfxLen) { continue }
+      $c0 = $tag[$pfxLen]; if ($c0 -lt '0' -or $c0 -gt '9') { continue }
+    }                                                   # tagMode 'exact' (DIARIO): basta o StartsWith
     $em = $r[1]; if ($em.IndexOf('@') -lt 0) { continue }
     $ts = $r[9]
     $ok = ($ts.Length -ge 10 -and $ts[2] -eq '/' -and $ts[5] -eq '/')
@@ -291,9 +301,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq) {
     if ($p -eq 'o') {
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
-      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = $cv.Trim(); if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
-      $sv = $r[7]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = $sv.Trim(); if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
-      $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = $av.Trim(); if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
+      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { if ($decodeUtm) { $cv = [Uri]::UnescapeDataString($cv.Replace('+', ' ')) }; $cv = $cv.Trim(); if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
+      $sv = $r[7]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { if ($decodeUtm) { $sv = [Uri]::UnescapeDataString($sv.Replace('+', ' ')) }; $sv = $sv.Trim(); if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
+      $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { if ($decodeUtm) { $av = [Uri]::UnescapeDataString($av.Replace('+', ' ')) }; $av = $av.Trim(); if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
     }
     $gk = "$d|$p|$ci|$si|$ai"
     $n = $grain[$gk]
@@ -471,28 +481,30 @@ function Finalize-Funnel($fn, $dow) {
   $leadsEra = 0; $totRev = 0.0; $totSales = 0
   foreach ($x in $daily) { if ($x.date -ge $SURVEY_START) { $leadsEra += $x.ld }; $totRev += $x.rev; $totSales += $x.sales }
 
-  # ---- editions/weeks --------------------------------------------------
+  # ---- editions/weeks (so p/ funis semanais; DIARIO usa dow=0 -> sem edicoes) ----
   # Cada DIA pertence a edicao cuja tag DOMINA aquele dia (a virada acontece
   # no dia do webinario). Isso bate com a contagem manual do cliente; usar o
   # ponto medio entre picos errava a fronteira em 1 dia.
-  $dayTopTag = @{}; $dayTopN = @{}; $edPeak = @{}; $edPeakN = @{}
-  foreach ($k in $fn.edDay.Keys) {
-    $sp = $k.Split('|'); $tg = $sp[0]; $dd = $sp[1]; $c = $fn.edDay[$k]
-    if (-not $dayTopN.ContainsKey($dd) -or $c -gt $dayTopN[$dd]) { $dayTopN[$dd] = $c; $dayTopTag[$dd] = $tg }
-    if (-not $edPeakN.ContainsKey($tg) -or $c -gt $edPeakN[$tg]) { $edPeakN[$tg] = $c; $edPeak[$tg] = $dd }
-  }
-  # Janela = ciclo semanal ancorado no dia do webinario (regra do cliente):
-  # o dia do evento ja capta para a proxima edicao -> [dia do evento .. vespera do proximo].
-  $tags = @($edPeak.Keys | Sort-Object { EdNum $_ })
   $eds = New-Object System.Collections.ArrayList
-  $usedCycle = @{}
-  foreach ($tg in $tags) {
-    $lo = CycleStart $edPeak[$tg] $dow
-    $hi = AddDaysS $lo 6
-    if ($usedCycle.ContainsKey($lo)) { Write-Host "   [aviso] ciclo $lo repetido em $tg" }
-    $usedCycle[$lo] = $tg
-    if ($lmin -ne '' -and $lo -lt $lmin) { $lo = $lmin }
-    [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $edPeak[$tg]; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
+  if ($dow -ge 1) {
+    $dayTopTag = @{}; $dayTopN = @{}; $edPeak = @{}; $edPeakN = @{}
+    foreach ($k in $fn.edDay.Keys) {
+      $sp = $k.Split('|'); $tg = $sp[0]; $dd = $sp[1]; $c = $fn.edDay[$k]
+      if (-not $dayTopN.ContainsKey($dd) -or $c -gt $dayTopN[$dd]) { $dayTopN[$dd] = $c; $dayTopTag[$dd] = $tg }
+      if (-not $edPeakN.ContainsKey($tg) -or $c -gt $edPeakN[$tg]) { $edPeakN[$tg] = $c; $edPeak[$tg] = $dd }
+    }
+    # Janela = ciclo semanal ancorado no dia do webinario (regra do cliente):
+    # o dia do evento ja capta para a proxima edicao -> [dia do evento .. vespera do proximo].
+    $tags = @($edPeak.Keys | Sort-Object { EdNum $_ })
+    $usedCycle = @{}
+    foreach ($tg in $tags) {
+      $lo = CycleStart $edPeak[$tg] $dow
+      $hi = AddDaysS $lo 6
+      if ($usedCycle.ContainsKey($lo)) { Write-Host "   [aviso] ciclo $lo repetido em $tg" }
+      $usedCycle[$lo] = $tg
+      if ($lmin -ne '' -and $lo -lt $lmin) { $lo = $lmin }
+      [void]$eds.Add(@{ tag = $tg; num = (EdNum $tg); peak = $edPeak[$tg]; lo = $lo; hi = $hi; leads = $fn.edLeads[$tg] })
+    }
   }
   Write-Host ("   finalize $($fn.key): grainNodes=$($grArr.Count) rev=R$ {0:n2} vendas={1} edicoes={2}" -f $totRev, $totSales, $eds.Count)
 
@@ -513,9 +525,12 @@ function Finalize-Funnel($fn, $dow) {
 # ========================================================================
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
-$salesInfo = Attribute-Sales @($segI, $terI)
+# DIARIO: Meta only ($gGoog=$null), tag exata WBN-2026-DIARIO, query com Ad<->AdSet trocados, utm URL-encoded (+ -> espaco)
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $null $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true
+$salesInfo = Attribute-Sales @($segI, $terI, $diaI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
+$dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
@@ -550,14 +565,16 @@ foreach ($dm in $DIMS) {
   $labels = @{}
   foreach ($lab in $seg.dist[$dk].Keys) { $labels[$lab] = $true }
   foreach ($lab in $ter.dist[$dk].Keys) { $labels[$lab] = $true }
+  foreach ($lab in $dia.dist[$dk].Keys) { $labels[$lab] = $true }
   $opts = New-Object System.Collections.ArrayList
   foreach ($lab in $labels.Keys) {
     $s = if ($seg.dist[$dk].ContainsKey($lab)) { $seg.dist[$dk][$lab] } else { 0 }
     $t = if ($ter.dist[$dk].ContainsKey($lab)) { $ter.dist[$dk][$lab] } else { 0 }
+    $dv = if ($dia.dist[$dk].ContainsKey($lab)) { $dia.dist[$dk][$lab] } else { 0 }
     $pt = if ($lab -eq '(sem resposta)') { PtFor $dk '' } else { PtFor $dk $lab }
-    [void]$opts.Add(@{ label = $lab; pts = $pt; seg = $s; ter = $t })
+    [void]$opts.Add(@{ label = $lab; pts = $pt; seg = $s; ter = $t; dia = $dv })
   }
-  $opts = @($opts | Sort-Object { -($_.seg + $_.ter) })
+  $opts = @($opts | Sort-Object { -($_.seg + $_.ter + $_.dia) })
   [void]$pesqDims.Add(@{ key = $dk; label = $dm.label; peso = $dm.peso; options = @($opts) })
 }
 
@@ -628,7 +645,7 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
 }
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
 $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
-$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv')) $script:FDI_BUYERS $matCut
+$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv')) $script:FDI_BUYERS $matCut
 Write-Host ("   validacao: {0} leads maturados, {1} compradores | Quente {2}/{3} Morno {4}/{5} Frio {6}/{7}" -f $validation.leads, $validation.buyers, $validation.tier.q.b, $validation.tier.q.n, $validation.tier.m.b, $validation.tier.m.n, $validation.tier.f.b, $validation.tier.f.n)
 $payload = @{
   generatedAt   = (Get-Date).ToUniversalTime().ToString('o')
@@ -643,12 +660,14 @@ $payload = @{
   names         = @{ c = @($CampArr.ToArray()); s = @($SetArr.ToArray()); a = @($AdArr.ToArray()) }
   segunda       = FunnelPayload $seg
   terca         = FunnelPayload $ter
+  diario        = FunnelPayload $dia
   pesquisa      = @{
     surveyStart = $SURVEY_START
     dims        = @($pesqDims)
     profile     = @($pesqProfile)
     seg         = @{ respTot = $seg.respTot; respMatch = $seg.respMatch; tierTot = $seg.tierTot; leadsEra = $seg.leadsEra }
     ter         = @{ respTot = $ter.respTot; respMatch = $ter.respMatch; tierTot = $ter.tierTot; leadsEra = $ter.leadsEra }
+    dia         = @{ respTot = $dia.respTot; respMatch = $dia.respMatch; tierTot = $dia.tierTot; leadsEra = $dia.leadsEra }
   }
 }
 

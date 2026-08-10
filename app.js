@@ -307,15 +307,20 @@
     var a = agg(f, st.lo, st.hi);
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
+    var isDaily = key === 'diario';
+    var optSection = isDaily
+      ? '<div class="section-title">Otimização · Meta <span class="st-line"></span></div>' + dailyBanner(f) +
+          '<div class="opt-cols single">' + optColDaily(f, st.lo, st.hi) + '</div>'
+      : '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
+          '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
+          '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
     body.innerHTML =
       (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '<span class="ed-hint">todas as métricas abaixo filtradas por esta semana</span></div>' : '') +
-      kpiRow(key, a) +
+      kpiRow(key, a, isDaily) +
       receitaBlock(a) +
       (showScore ? scoreStrip(a) : coverageBanner()) +
       chartsBlock(key) +
-      '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
-      '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
+      optSection;
     drawCharts(key, a);
     wireTrees(key);
   }
@@ -345,22 +350,24 @@
       '</div>';
   }
 
-  function kpiRow(key, a) {
+  function kpiRow(key, a, metaOnly) {
     var mColor = 'var(--meta)', gColor = 'var(--goog)';
     return '<div class="kpi-row">' +
       // Investment hero
       '<div class="card kpi hero"><div class="klabel">💰 Investimento total</div>' +
       '<div class="kval">' + fBRL0(a.spend) + '</div>' +
       '<div class="ksub">' +
-      '<span><span class="dot g"></span>Google <span class="kv">' + fBRL0(a.gSp) + '</span></span>' +
+      (metaOnly ? '' : '<span><span class="dot g"></span>Google <span class="kv">' + fBRL0(a.gSp) + '</span></span>') +
       '<span><span class="dot m"></span>Meta <span class="kv">' + fBRL0(a.mSp) + '</span> <span class="pill-plat m">c/ imposto</span></span>' +
       '</div></div>' +
       // Leads
       card3('👥 Leads captados', fInt(a.leads),
-        '<span><span class="dot g"></span>' + fInt(a.gLd) + '</span><span><span class="dot m"></span>' + fInt(a.mLd) + '</span>' + (a.oLd ? '<span>outros ' + fInt(a.oLd) + '</span>' : '')) +
+        (metaOnly ? '<span><span class="dot m"></span>' + fInt(a.mLd) + '</span>' + (a.oLd ? '<span>outros ' + fInt(a.oLd) + '</span>' : '')
+                  : '<span><span class="dot g"></span>' + fInt(a.gLd) + '</span><span><span class="dot m"></span>' + fInt(a.mLd) + '</span>' + (a.oLd ? '<span>outros ' + fInt(a.oLd) + '</span>' : ''))) +
       // CPL
       card3('🎯 CPL', money(a.cpl),
-        '<span>G <span class="kv">' + money(a.gCpl) + '</span></span><span>M <span class="kv">' + money(a.mCpl) + '</span></span>') +
+        (metaOnly ? '<span>Meta <span class="kv">' + money(a.mCpl) + '</span></span>'
+                  : '<span>G <span class="kv">' + money(a.gCpl) + '</span></span><span>M <span class="kv">' + money(a.mCpl) + '</span></span>')) +
       // secondary metrics
       card3('📊 Alcance & cliques', fInt(a.gIm + a.mIm) + ' <span style="font-size:13px;color:var(--muted)">impr.</span>',
         '<span>Cliques <span class="kv">' + fInt(a.gCk + a.mCk) + '</span></span><span>CTR <span class="kv">' + fPct(a.ctr) + '</span></span><span>CPM <span class="kv">' + money(a.cpm) + '</span></span>') +
@@ -534,6 +541,123 @@
   function pretty(s) { if (!s) return '—'; if (s === '(sem rastreio)' || s === '(sem)') return '— sem rastreio —'; return s; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  /* =====================================================================
+     FUNIL DIARIO — Meta only. Sem venda ainda => otimiza por CPL; quando a
+     1a venda cai (f.totalSales>0) inclui o ROAS projetado, mantendo o CPL.
+  ===================================================================== */
+  var MED_CPL_D = null;      // mediana do CPL do funil diario (p/ colorir + tags)
+  var DAILY_SALES = false;   // o funil diario ja tem venda atribuida?
+  function dailyRoas(n) { return (n.sp > 0 && (n.sales > 0 || n.rev > 0)) ? (n.rev / n.sp) : null; }
+  function dailyTag(n) {
+    if (n.sp <= 0 && n.ld <= 0) return null;
+    if (DAILY_SALES) {                                  // ja tem venda -> ROAS projetado manda
+      var r = dailyRoas(n);
+      if (n.sp < 20 || r == null) return { c: 'matur', t: '🕐 Maturando' };
+      if (r < 0.4) return { c: 'pausar', t: 'Pausar' };
+      if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };
+      if (r >= 0.7) return { c: 'manter', t: 'Manter' };
+      return { c: 'revisar', t: 'Revisar' };
+    }
+    // sem venda -> otimizacao provisoria por CPL (custo por lead)
+    if (n.ld < 10 || n.cpl == null) return { c: 'matur', t: '🕐 Poucos leads' };
+    if (!MED_CPL_D) return { c: 'manter', t: 'Manter' };
+    if (n.cpl <= 0.8 * MED_CPL_D) return { c: 'acelerar', t: 'Acelerar' };
+    if (n.cpl >= 1.35 * MED_CPL_D) return { c: 'revisar', t: 'Revisar' };
+    return { c: 'manter', t: 'Manter' };
+  }
+  function countTagD(n, cls) { var c = 0; if (n.children) n.children.forEach(function (ch) { var t = dailyTag(ch); if (t && t.c === cls) c++; c += countTagD(ch, cls); }); return c; }
+  function sortValD(n, sk) {
+    if (sk === 'name') return n.name;
+    if (sk === 'sp') return n.sp;
+    if (sk === 'ld') return n.ld;
+    if (sk === 'cpl') return n.cpl;
+    if (sk === 'roas') return dailyRoas(n);
+    if (sk === 'acao') { var t = dailyTag(n); return t ? ACT_RANK[t.c] : 9; }
+    return 0;
+  }
+  function sortTreeD(list, sk, dir) {
+    list.sort(function (a, b) {
+      var va = sortValD(a, sk), vb = sortValD(b, sk);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; if (vb == null) return -1;
+      if (sk === 'name') return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+    list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
+  }
+  function dailyBanner(f) {
+    if ((f.totalSales || 0) > 0)
+      return '<div class="banner" style="margin-bottom:14px">💰 <div>Funil diário <b>com vendas</b>: a <b>Ação</b> agora decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4), e o <b>CPL</b> segue visível pra você acompanhar o custo por lead.</div></div>';
+    return '<div class="banner" style="margin-bottom:14px">🌱 <div>Funil <b>novo</b>, ainda <b>sem vendas</b> — a otimização é por <b>CPL</b> (custo por lead): <b>Acelerar</b> = CPL barato (≤ 0,8× a mediana) · <b>Revisar</b> = caro (≥ 1,35×) · <b>Manter</b> no meio · 🕐 poucos leads pra julgar. Assim que a <b>1ª venda</b> cair, eu ligo o <b>ROAS projetado</b> aqui automaticamente (mantendo o CPL) e passamos a otimizar por lucro.</div></div>';
+  }
+  function treeRowsDaily(n, fk, parentPath) {
+    var path = parentPath + '¦' + n.name;
+    var skey = fk + '_m';
+    var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
+    var open = !!set[path];
+    var hasKids = n.children && n.children.length;
+    var tag = dailyTag(n);
+    var accelN = hasKids ? countTagD(n, 'acelerar') : 0;
+    var cplc = cplColor(n.cpl, MED_CPL_D);
+    var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
+    var roasCell = '';
+    if (DAILY_SALES) {
+      var r = dailyRoas(n);
+      roasCell = '<div class="tr-num tr-q">' + (r == null
+        ? '<span class="qc muted" title="sem venda ainda">🕐</span>'
+        : '<span class="qc" style="color:' + roasColor(r) + ';font-weight:700">' + fRoas(r) + '</span><div class="qsub">' + fInt(n.sales) + 'v · ' + fBRL0(n.rev) + '</div>') + '</div>';
+    }
+    var ttl = 'Investido ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads · CPL ' + (n.cpl == null ? '—' : fBRL(n.cpl)) + (DAILY_SALES && n.sales ? ' · ' + fInt(n.sales) + ' vendas (ROAS ' + fRoas(dailyRoas(n)) + ')' : '');
+    var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
+      '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
+      '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
+      '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
+      '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
+      roasCell +
+      '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
+        (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' anúncio(s) pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
+      '</div>' +
+      '</div>';
+    var kids = '';
+    if (hasKids && open) kids = n.children.map(function (c) { return treeRowsDaily(c, fk, path); }).join('');
+    return row + kids;
+  }
+  function optColDaily(f, lo, hi) {
+    var list = buildTree(f, 'm', lo, hi);
+    DAILY_SALES = (f.totalSales || 0) > 0;
+    var withSp = list.filter(function (n) { return n.sp > 0; });
+    var noSp = list.filter(function (n) { return n.sp <= 0; });
+    MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0 });
+    var cpl = tot.ld ? tot.sp / tot.ld : null;
+    var roas = (DAILY_SALES && tot.sp) ? tot.rev / tot.sp : null;
+    var sortKey = f.key + '_m';
+    var so = SORT_STATE[sortKey] || { sk: 'cpl', dir: 1 };   // default: CPL crescente (mais barato primeiro)
+    sortTreeD(withSp, so.sk, so.dir);
+    var rows = withSp.map(function (c) { return treeRowsDaily(c, f.key, ''); }).join('');
+    if (noSp.length) {
+      var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rev: 0, sales: 0, cpl: null, children: [] };
+      noSp.forEach(function (n) { orph.ld += n.ld; });
+      if (orph.ld > 0) rows += treeRowsDaily(orph, f.key, '');
+    }
+    if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
+    var d = DAILY_SALES;
+    var totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+      (d ? ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales)) : '');
+    var head = sHead(sortKey, so, 'name', 'Campanha / conjunto / anúncio', 'tr-name') +
+      sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
+      sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
+      sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
+      (d ? sHead(sortKey, so, 'roas', 'ROAS', 'tr-num') : '') +
+      sHead(sortKey, so, 'acao', 'Ação', 'tr-num');
+    return '<div class="opt-col m">' +
+      '<div class="opt-head"><div class="oh-ic">M</div><div><h3>Meta Ads</h3><div class="oh-sub">campanha › conjunto › anúncio · imposto ×1,1385</div></div></div>' +
+      '<div class="opt-totals">' + totals + '</div>' +
+      '<div class="tree ' + (d ? 'd6' : 'd5') + '">' +
+      '<div class="tr-row head">' + head + '</div>' +
+      rows + '</div></div>';
+  }
+
   /* ---------- charts (SVG) ---------- */
   var TIP = document.getElementById('tooltip');
   function showTip(html, ev) { TIP.innerHTML = html; TIP.hidden = false; var x = ev.clientX + 14, y = ev.clientY + 14; if (x + 250 > innerWidth) x = ev.clientX - 250; TIP.style.left = x + 'px'; TIP.style.top = y + 'px'; }
@@ -629,7 +753,7 @@
     host.innerHTML =
       '<div class="periodbar" style="justify-content:space-between">' +
       '<div class="seg-toggle" id="pseg">' +
-      '<button data-s="segunda">Segunda</button><button data-s="terca">Terça</button><button data-s="soma" class="active">Soma</button>' +
+      '<button data-s="segunda">Segunda</button><button data-s="terca">Terça</button><button data-s="diario">Diário</button><button data-s="soma" class="active">Soma</button>' +
       '</div>' +
       '<span class="daterange" style="margin:0">Pesquisa acumulada desde ' + dfull(D.surveyStart) + '</span>' +
       '</div>' +
@@ -648,10 +772,12 @@
     var P = D.pesquisa;
     if (which === 'segunda') return { rt: P.seg.respTot, rm: P.seg.respMatch, t: P.seg.tierTot, era: P.seg.leadsEra };
     if (which === 'terca') return { rt: P.ter.respTot, rm: P.ter.respMatch, t: P.ter.tierTot, era: P.ter.leadsEra };
+    if (which === 'diario' && P.dia) return { rt: P.dia.respTot, rm: P.dia.respMatch, t: P.dia.tierTot, era: P.dia.leadsEra };
+    var dia = P.dia || { respTot: 0, respMatch: 0, tierTot: { f: 0, m: 0, q: 0 }, leadsEra: 0 };
     return {
-      rt: P.seg.respTot + P.ter.respTot, rm: P.seg.respMatch + P.ter.respMatch,
-      t: { f: P.seg.tierTot.f + P.ter.tierTot.f, m: P.seg.tierTot.m + P.ter.tierTot.m, q: P.seg.tierTot.q + P.ter.tierTot.q },
-      era: P.seg.leadsEra + P.ter.leadsEra
+      rt: P.seg.respTot + P.ter.respTot + dia.respTot, rm: P.seg.respMatch + P.ter.respMatch + dia.respMatch,
+      t: { f: P.seg.tierTot.f + P.ter.tierTot.f + dia.tierTot.f, m: P.seg.tierTot.m + P.ter.tierTot.m + dia.tierTot.m, q: P.seg.tierTot.q + P.ter.tierTot.q + dia.tierTot.q },
+      era: P.seg.leadsEra + P.ter.leadsEra + dia.leadsEra
     };
   }
 
@@ -721,10 +847,10 @@
 
     body.innerHTML = validationPanel() + summary + strip + prof + dims + ruler();
   }
-  function labelOf(w) { return w === 'segunda' ? 'Segunda-feira' : (w === 'terca' ? 'Terça-feira' : 'Soma dos dois funis'); }
+  function labelOf(w) { return w === 'segunda' ? 'Segunda-feira' : (w === 'terca' ? 'Terça-feira' : (w === 'diario' ? 'Webinar diário' : 'Soma dos funis')); }
 
   function dimCard(dm, w) {
-    var opts = arr(dm.options).map(function (o) { var v = w === 'segunda' ? o.seg : (w === 'terca' ? o.ter : o.seg + o.ter); return { label: o.label, pts: o.pts, v: v }; });
+    var opts = arr(dm.options).map(function (o) { var dv = o.dia || 0; var v = w === 'segunda' ? o.seg : (w === 'terca' ? o.ter : (w === 'diario' ? dv : o.seg + o.ter + dv)); return { label: o.label, pts: o.pts, v: v }; });
     opts = opts.filter(function (o) { return o.v > 0; }).sort(function (a, b) { return b.v - a.v; });
     var tot = opts.reduce(function (s, o) { return s + o.v; }, 0) || 1;
     var max = opts.length ? opts[0].v : 1;

@@ -198,6 +198,7 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 
 /* ---- optimization two columns ---- */
 .opt-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.opt-cols.single{grid-template-columns:1fr}   /* funil diario = so Meta */
 .opt-col{background:linear-gradient(170deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .opt-col.g{border-top:3px solid var(--goog)}
 .opt-col.m{border-top:3px solid var(--meta)}
@@ -214,6 +215,8 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 
 .tree{padding:6px 8px 12px}
 .tr-row{display:grid;grid-template-columns:1fr 66px 50px 60px 60px 84px;gap:5px;align-items:center;padding:7px 8px;border-radius:8px;cursor:default}
+.tree.d5 .tr-row{grid-template-columns:1fr 96px 68px 88px 116px}   /* diario sem venda: Nome Invest Leads CPL Acao */
+.tree.d6 .tr-row{grid-template-columns:1fr 84px 60px 74px 70px 100px} /* diario com venda: + ROAS */
 .tr-row.lvl0{cursor:pointer}
 .tr-row.head{position:sticky;top:0;background:var(--panel);z-index:2;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid var(--line)}
 .tr-row.head .sortable{cursor:pointer;user-select:none;transition:color .12s;display:flex;align-items:center;gap:3px}
