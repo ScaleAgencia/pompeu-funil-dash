@@ -550,15 +550,18 @@
   function dailyRoas(n) { return (n.sp > 0 && (n.sales > 0 || n.rev > 0)) ? (n.rev / n.sp) : null; }
   function dailyTag(n) {
     if (n.sp <= 0 && n.ld <= 0) return null;
-    if (DAILY_SALES) {                                  // ja tem venda -> ROAS projetado manda
+    // Onde o anuncio JA converteu, o ROAS manda (lucro). Onde ainda nao vendeu,
+    // segue decidindo pelo CPL (mantido) — assim todo anuncio tem acao.
+    if (DAILY_SALES) {
       var r = dailyRoas(n);
-      if (n.sp < 20 || r == null) return { c: 'matur', t: '🕐 Maturando' };
-      if (r < 0.4) return { c: 'pausar', t: 'Pausar' };
-      if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };
-      if (r >= 0.7) return { c: 'manter', t: 'Manter' };
-      return { c: 'revisar', t: 'Revisar' };
+      if (r != null && n.sp >= 20) {
+        if (r < 0.4) return { c: 'pausar', t: 'Pausar' };
+        if (r >= 1.0) return { c: 'acelerar', t: 'Acelerar' };
+        if (r >= 0.7) return { c: 'manter', t: 'Manter' };
+        return { c: 'revisar', t: 'Revisar' };
+      }
     }
-    // sem venda -> otimizacao provisoria por CPL (custo por lead)
+    // CPL (funil sem venda ainda, ou anuncio que ainda nao converteu)
     if (n.ld < 10 || n.cpl == null) return { c: 'matur', t: '🕐 Poucos leads' };
     if (!MED_CPL_D) return { c: 'manter', t: 'Manter' };
     if (n.cpl <= 0.8 * MED_CPL_D) return { c: 'acelerar', t: 'Acelerar' };
@@ -587,7 +590,7 @@
   }
   function dailyBanner(f) {
     if ((f.totalSales || 0) > 0)
-      return '<div class="banner" style="margin-bottom:14px">💰 <div>Funil diário <b>com vendas</b>: a <b>Ação</b> agora decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4), e o <b>CPL</b> segue visível pra você acompanhar o custo por lead.</div></div>';
+      return '<div class="banner" style="margin-bottom:14px">💰 <div>Funil diário <b>já vendendo</b>: onde o anúncio <b>já converteu</b>, a Ação decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); onde <b>ainda não vendeu</b>, segue pelo <b>CPL</b> (barato = Acelerar). O CPL fica visível o tempo todo, e o ROAS mostra vendas + receita por anúncio. Atualiza sozinho a cada 3h.</div></div>';
     return '<div class="banner" style="margin-bottom:14px">🌱 <div>Funil <b>novo</b>, ainda <b>sem vendas</b> — a otimização é por <b>CPL</b> (custo por lead): <b>Acelerar</b> = CPL barato (≤ 0,8× a mediana) · <b>Revisar</b> = caro (≥ 1,35×) · <b>Manter</b> no meio · 🕐 poucos leads pra julgar. Assim que a <b>1ª venda</b> cair, eu ligo o <b>ROAS projetado</b> aqui automaticamente (mantendo o CPL) e passamos a otimizar por lucro.</div></div>';
   }
   function treeRowsDaily(n, fk, parentPath) {

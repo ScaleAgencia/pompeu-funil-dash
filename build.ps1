@@ -222,7 +222,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false) {
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
@@ -298,6 +298,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($srcl.IndexOf('google') -ge 0) { $p = 'g' }
     elseif ($srcl.IndexOf('face') -ge 0 -or $srcl.IndexOf('meta') -ge 0 -or $srcl.IndexOf('insta') -ge 0 -or $srcl -eq 'ig') { $p = 'm' }
     else { $p = 'o' }
+    if ($metaOnly -and $p -ne 'm') { continue }         # funil Meta-only (DIARIO): ignora leads Google/sem-utm (sem query p/ medir)
     if ($p -eq 'o') {
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
@@ -526,7 +527,7 @@ function Finalize-Funnel($fn, $dow) {
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
 # DIARIO: Meta only ($gGoog=$null), tag exata WBN-2026-DIARIO, query com Ad<->AdSet trocados, utm URL-encoded (+ -> espaco)
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $null $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $null $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $true
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
