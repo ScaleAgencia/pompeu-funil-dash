@@ -28,9 +28,10 @@ $G_META_TERCA  = 0
 $G_GOOG_TERCA  = 837001685
 $G_META_SEG    = 1484394087
 $G_GOOG_SEG    = 968000625
-# --- Webinar DIARIO (funil novo, Meta only) ---
+# --- Webinar DIARIO (funil novo, Meta + Google) ---
 $G_META_DIARIO  = 0            # aba "Queries | WBN DIARIO" (col order: Day,Campaign,Ad,AdSet,...)
-$G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO)
+$G_GOOG_DIARIO  = 1609119011  # aba "Queries Google WBN DIARIO" (col order PADRAO: Day,Campaign,AdGroup,Ad,Cost,...)
+$G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO; src google-ads = Google, facebook-ads = Meta)
 $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -226,7 +227,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
-  $fGoog = if ($null -ne $gGoog) { Get-Csv $QID $gGoog "$key`_goog" } else { $null }
+  $fGoog = if ($null -ne $gGoog) { Get-Csv $metaId $gGoog "$key`_goog" } else { $null }   # Google na MESMA planilha do Meta do funil
   $fLead = Get-Csv $leadsId $gLeads "$key`_leads"
   $fPesq = Get-Csv $leadsId $gPesq "$key`_pesq"
   Write-Host ("   [{0:n1}s] downloaded" -f $T.Elapsed.TotalSeconds)
@@ -526,8 +527,8 @@ function Finalize-Funnel($fn, $dow) {
 # ========================================================================
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
-# DIARIO: Meta only ($gGoog=$null), tag exata WBN-2026-DIARIO, query com Ad<->AdSet trocados, utm URL-encoded (+ -> espaco)
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $null $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $true
+# DIARIO: Meta + Google (mesma planilha QID_DIARIO), tag exata WBN-2026-DIARIO; Meta com Ad<->AdSet trocados + utm URL-encoded (+->espaco); Google col padrao + utm plano
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda

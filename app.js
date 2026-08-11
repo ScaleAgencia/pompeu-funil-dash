@@ -309,14 +309,14 @@
     var showScore = st.hi >= D.surveyStart;
     var isDaily = key === 'diario';
     var optSection = isDaily
-      ? '<div class="section-title">Otimização · Meta <span class="st-line"></span></div>' + dailyBanner(f) +
-          '<div class="opt-cols single">' + optColDaily(f, st.lo, st.hi) + '</div>'
+      ? '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' + dailyBanner(f) +
+          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi) + optColDaily(f, 'm', st.lo, st.hi) + '</div>'
       : '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
           '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
           '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
     body.innerHTML =
       (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '<span class="ed-hint">todas as métricas abaixo filtradas por esta semana</span></div>' : '') +
-      kpiRow(key, a, isDaily) +
+      kpiRow(key, a, false) +
       receitaBlock(a) +
       (showScore ? scoreStrip(a) : coverageBanner()) +
       chartsBlock(key) +
@@ -589,13 +589,11 @@
     list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
   }
   function dailyBanner(f) {
-    if ((f.totalSales || 0) > 0)
-      return '<div class="banner" style="margin-bottom:14px">💰 <div>Funil diário <b>já vendendo</b>: onde o anúncio <b>já converteu</b>, a Ação decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); onde <b>ainda não vendeu</b>, segue pelo <b>CPL</b> (barato = Acelerar). O CPL fica visível o tempo todo, e o ROAS mostra vendas + receita por anúncio. Atualiza sozinho a cada 3h.</div></div>';
-    return '<div class="banner" style="margin-bottom:14px">🌱 <div>Funil <b>novo</b>, ainda <b>sem vendas</b> — a otimização é por <b>CPL</b> (custo por lead): <b>Acelerar</b> = CPL barato (≤ 0,8× a mediana) · <b>Revisar</b> = caro (≥ 1,35×) · <b>Manter</b> no meio · 🕐 poucos leads pra julgar. Assim que a <b>1ª venda</b> cair, eu ligo o <b>ROAS projetado</b> aqui automaticamente (mantendo o CPL) e passamos a otimizar por lucro.</div></div>';
+    return '<div class="banner" style="margin-bottom:14px">💡 <div>Funil diário em <b>Meta + Google</b> — cada plataforma se adapta: onde o anúncio <b>já converteu</b>, a Ação decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); onde <b>ainda não vendeu</b>, decide pelo <b>CPL</b> (barato ≤ 0,8× a mediana = Acelerar, caro ≥ 1,35× = Revisar). O CPL fica visível sempre e o ROAS aparece assim que a plataforma vende. Atualiza sozinho a cada 3h. <b>Meta com imposto ×1,1385; Google sem.</b></div></div>';
   }
-  function treeRowsDaily(n, fk, parentPath) {
+  function treeRowsDaily(n, fk, plat, parentPath) {
     var path = parentPath + '¦' + n.name;
-    var skey = fk + '_m';
+    var skey = fk + '_' + plat;
     var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
@@ -622,39 +620,40 @@
       '</div>' +
       '</div>';
     var kids = '';
-    if (hasKids && open) kids = n.children.map(function (c) { return treeRowsDaily(c, fk, path); }).join('');
+    if (hasKids && open) kids = n.children.map(function (c) { return treeRowsDaily(c, fk, plat, path); }).join('');
     return row + kids;
   }
-  function optColDaily(f, lo, hi) {
-    var list = buildTree(f, 'm', lo, hi);
-    DAILY_SALES = (f.totalSales || 0) > 0;
+  function optColDaily(f, plat, lo, hi) {
+    var isG = plat === 'g';
+    var list = buildTree(f, plat, lo, hi);
     var withSp = list.filter(function (n) { return n.sp > 0; });
     var noSp = list.filter(function (n) { return n.sp <= 0; });
-    MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
     var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0 });
+    DAILY_SALES = tot.sales > 0;   // modo ROAS por PLATAFORMA (Google pode ainda nao ter vendido)
+    MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
     var cpl = tot.ld ? tot.sp / tot.ld : null;
     var roas = (DAILY_SALES && tot.sp) ? tot.rev / tot.sp : null;
-    var sortKey = f.key + '_m';
+    var sortKey = f.key + '_' + plat;
     var so = SORT_STATE[sortKey] || { sk: 'cpl', dir: 1 };   // default: CPL crescente (mais barato primeiro)
     sortTreeD(withSp, so.sk, so.dir);
-    var rows = withSp.map(function (c) { return treeRowsDaily(c, f.key, ''); }).join('');
+    var rows = withSp.map(function (c) { return treeRowsDaily(c, f.key, plat, ''); }).join('');
     if (noSp.length) {
       var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rev: 0, sales: 0, cpl: null, children: [] };
       noSp.forEach(function (n) { orph.ld += n.ld; });
-      if (orph.ld > 0) rows += treeRowsDaily(orph, f.key, '');
+      if (orph.ld > 0) rows += treeRowsDaily(orph, f.key, plat, '');
     }
     if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
     var d = DAILY_SALES;
     var totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
       (d ? ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales)) : '');
-    var head = sHead(sortKey, so, 'name', 'Campanha / conjunto / anúncio', 'tr-name') +
+    var head = sHead(sortKey, so, 'name', 'Campanha / ' + (isG ? 'grupo' : 'conjunto') + ' / anúncio', 'tr-name') +
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
       sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
       (d ? sHead(sortKey, so, 'roas', 'ROAS', 'tr-num') : '') +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num');
-    return '<div class="opt-col m">' +
-      '<div class="opt-head"><div class="oh-ic">M</div><div><h3>Meta Ads</h3><div class="oh-sub">campanha › conjunto › anúncio · imposto ×1,1385</div></div></div>' +
+    return '<div class="opt-col ' + plat + '">' +
+      '<div class="opt-head"><div class="oh-ic">' + (isG ? 'G' : 'M') + '</div><div><h3>' + (isG ? 'Google Ads' : 'Meta Ads') + '</h3><div class="oh-sub">campanha › ' + (isG ? 'grupo' : 'conjunto') + ' › anúncio · ' + (isG ? 'sem imposto' : 'imposto ×1,1385') + '</div></div></div>' +
       '<div class="opt-totals">' + totals + '</div>' +
       '<div class="tree ' + (d ? 'd6' : 'd5') + '">' +
       '<div class="tr-row head">' + head + '</div>' +
