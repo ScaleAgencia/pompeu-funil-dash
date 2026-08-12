@@ -323,8 +323,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $totalLeads++
     $edLeads[$tag] = $edLeads[$tag] + 1
     $ek2 = "$tag|$d"; $edDay[$ek2] = $edDay[$ek2] + 1
-    $lead = @{ d = $d; node = $n; resp = $false }
     $ek = $em.Trim().ToLowerInvariant()
+    $lead = @{ d = $d; node = $n; resp = $false; em = $ek }   # guarda o email p/ o anti-xara do match por nome
     $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
     if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
     $pk = $r[2] -replace '\D', ''
@@ -450,12 +450,15 @@ function Attribute-Sales($funnels) {
     # Fallback DIARIO: planilha de vendas NAO tem telefone -> nome completo como 2o sinal (email tem prioridade).
     # Pega o comprador que se cadastrou no diario com um email e comprou com outro. Trava: nome+sobrenome, captacao <= venda.
     if ($null -eq $best) {
-      $nk = NKey $r[1]
+      $nk = NKey $r[1]                                  # exige nome+sobrenome (>=2 tokens) e casa o nome COMPLETO
       if ($nk -ne '') {
         foreach ($fn in $funnels) {
           if ($fn.key -ne 'diario' -or $null -eq $fn.nameIndex) { continue }
           $cands = $fn.nameIndex[$nk]
           if ($null -eq $cands) { continue }
+          # ANTI-XARA: se o mesmo nome completo aparece com 2+ emails distintos (pessoas diferentes), NAO adivinha
+          $emails = @{}; foreach ($c in $cands) { $emails[$c.em] = 1 }
+          if ($emails.Count -gt 1) { continue }
           foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
         }
       }
