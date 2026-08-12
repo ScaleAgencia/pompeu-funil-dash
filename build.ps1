@@ -127,6 +127,14 @@ function Deacc($s) {
   }
   return $sb.ToString().ToLowerInvariant()
 }
+# Nome normalizado p/ cruzamento (deaccent, so a-z e espaco, colapsa espacos). '' se < 2 tokens.
+function NKey($s) {
+  $t = Deacc $s
+  $t = ($t -replace '[^a-z ]', ' ')
+  $t = ($t -replace '\s+', ' ').Trim()
+  if ($t.IndexOf(' ') -lt 0) { return '' }   # exige nome + sobrenome (evita xara de 1 token)
+  return $t
+}
 
 # ---- leadscore: one function per dimension (de-accented -like matching) --
 function PtIdade($a) {
@@ -223,7 +231,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false) {
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
@@ -274,6 +282,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   $rows = Read-Rows $fLead
   $emIndex = @{}   # emailKey -> ArrayList of leadObj (this funnel)
   $phIndex = @{}
+  $nmIndex = @{}   # nomeKey -> ArrayList of leadObj (so quando $buildNameIdx; usado no fallback de atribuicao)
   $edLeads = @{}   # tag -> lead count (edicao/semana)
   $edDay = @{}     # "tag|date" -> count (pra achar o dia de pico)
   $totalLeads = 0
@@ -317,6 +326,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $lead = @{ d = $d; node = $n; resp = $false }
     $ek = $em.Trim().ToLowerInvariant()
     $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
+    if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
     $pk = $r[2] -replace '\D', ''
     if ($pk.Length -ge 12 -and $pk.StartsWith('55')) { $pk = $pk.Substring(2) }
     if ($pk.Length -gt 11) { $pk = $pk.Substring($pk.Length - 11) }
@@ -382,7 +392,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
 
   # Return INTERMEDIATE state (rollup happens in Finalize-Funnel, AFTER sales attribution).
   return @{
-    key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex;
+    key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex; nameIndex = $nmIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
     tierTot = $tierTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay
   }
@@ -434,6 +444,19 @@ function Attribute-Sales($funnels) {
         if ($null -eq $cands) { continue }
         foreach ($c in $cands) {
           if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } }
+        }
+      }
+    }
+    # Fallback DIARIO: planilha de vendas NAO tem telefone -> nome completo como 2o sinal (email tem prioridade).
+    # Pega o comprador que se cadastrou no diario com um email e comprou com outro. Trava: nome+sobrenome, captacao <= venda.
+    if ($null -eq $best) {
+      $nk = NKey $r[1]
+      if ($nk -ne '') {
+        foreach ($fn in $funnels) {
+          if ($fn.key -ne 'diario' -or $null -eq $fn.nameIndex) { continue }
+          $cands = $fn.nameIndex[$nk]
+          if ($null -eq $cands) { continue }
+          foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
         }
       }
     }
@@ -528,7 +551,7 @@ function Finalize-Funnel($fn, $dow) {
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
 # DIARIO: Meta + Google (mesma planilha QID_DIARIO), tag exata WBN-2026-DIARIO; Meta com Ad<->AdSet trocados + utm URL-encoded (+->espaco); Google col padrao + utm plano
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda

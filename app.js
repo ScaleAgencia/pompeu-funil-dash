@@ -309,7 +309,7 @@
     var showScore = st.hi >= D.surveyStart;
     var isDaily = key === 'diario';
     var optSection = isDaily
-      ? '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' + dailyBanner(f) +
+      ? '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' + dailyBanner(f) + dailyRoasStrip(a) +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi) + optColDaily(f, 'm', st.lo, st.hi) + '</div>'
       : '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
           '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
@@ -590,6 +590,19 @@
   }
   function dailyBanner(f) {
     return '<div class="banner" style="margin-bottom:14px">💡 <div>Funil diário em <b>Meta + Google</b> — cada plataforma se adapta: onde o anúncio <b>já converteu</b>, a Ação decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); onde <b>ainda não vendeu</b>, decide pelo <b>CPL</b> (barato ≤ 0,8× a mediana = Acelerar, caro ≥ 1,35× = Revisar). O CPL fica visível sempre e o ROAS aparece assim que a plataforma vende. Atualiza sozinho a cada 3h. <b>Meta com imposto ×1,1385; Google sem.</b></div></div>';
+  }
+  // ROAS TOTAL da captação diária (Meta+Google consolidado) — atribuição por e-mail + nome do comprador do FDI
+  function dailyRoasStrip(a) {
+    var roas = a.roas, cls = roas == null ? 'bad' : (roas >= 1 ? 'good' : roas >= 0.5 ? 'ok' : 'bad');
+    var conv = a.leads ? a.sales / a.leads : null;
+    return '<div class="daily-roas ' + cls + '">' +
+      '<div class="dr-hero"><div class="dr-l">↩️ ROAS projetado da captação diária</div><div class="dr-big">' + (roas == null ? '—' : fRoas(roas)) + '</div><div class="dr-sub">Meta + Google · receita ÷ investimento</div></div>' +
+      '<div class="dr-cells">' +
+      '<div class="dr-item"><div class="dr-l">Investido (Meta+Google)</div><div class="dr-v">' + fBRL0(a.spend) + '</div></div>' +
+      '<div class="dr-item"><div class="dr-l">Receita atribuída (FDI)</div><div class="dr-v">' + fBRL0(a.rev) + '</div></div>' +
+      '<div class="dr-item"><div class="dr-l">Vendas</div><div class="dr-v">' + fInt(a.sales) + '</div></div>' +
+      '<div class="dr-item"><div class="dr-l">Conv. lead→venda</div><div class="dr-v">' + fPct(conv, 2) + '</div></div>' +
+      '</div></div>';
   }
   function treeRowsDaily(n, fk, plat, parentPath) {
     var path = parentPath + '¦' + n.name;
