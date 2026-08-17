@@ -40,7 +40,9 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
 # ---- helpers ------------------------------------------------------------
 function Get-Csv($id, $gid, $name) {
-  $url = "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid"
+  # &_cb=<ticks> = cache-buster: o gviz do Google as vezes serve CSV cacheado (dias atrasado);
+  # sem isso o build pega query velha (ex: Google diario parado num dia antigo). Ticks unico por build.
+  $url = "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid&_cb=$([DateTime]::UtcNow.Ticks)"
   $out = Join-Path $dataDir "$name.csv"
   if ($env:POMPEU_REUSE -eq '1' -and (Test-Path $out)) { return $out }
   for ($try = 1; $try -le 4; $try++) {
@@ -49,6 +51,7 @@ function Get-Csv($id, $gid, $name) {
       $wc = New-Object System.Net.WebClient
       $wc.Encoding = [Text.Encoding]::UTF8
       $wc.Headers.Add('User-Agent', 'Mozilla/5.0 pompeu-dash')
+      $wc.Headers.Add('Cache-Control', 'no-cache')
       $wc.DownloadFile($url, $out)
       $wc.Dispose()
       break
@@ -134,6 +137,14 @@ function NKey($s) {
   $t = ($t -replace '\s+', ' ').Trim()
   if ($t.IndexOf(' ') -lt 0) { return '' }   # exige nome + sobrenome (evita xara de 1 token)
   return $t
+}
+# Acha o indice de uma coluna pelo NOME do cabecalho (deaccent, case-insensitive); usa $default se nao achar.
+function ColOf($hdr, $names, $default) {
+  foreach ($nm in $names) {
+    $tn = (Deacc $nm).Trim()
+    for ($i = 0; $i -lt $hdr.Length; $i++) { if ((Deacc $hdr[$i]).Trim() -eq $tn) { return $i } }
+  }
+  return $default
 }
 
 # ---- leadscore: one function per dimension (de-accented -like matching) --
@@ -419,38 +430,62 @@ function Attribute-Sales($funnels) {
   Write-Host "== sales : Formula dos Investimentos =="
   $Ts = [Diagnostics.Stopwatch]::StartNew()
   $file = Get-Csv $SALES_ID 0 'sales'
+  # --- mapeia colunas por NOME do cabecalho (robusto a insercao de colunas, ex: WhatsApp no meio) ---
+  $lines = [System.IO.File]::ReadAllLines($file, [Text.Encoding]::UTF8)
+  $hdr = @()
+  if ($lines.Length -gt 0) { $h0 = $lines[0]; if ($h0.Length -ge 2 -and $h0[0] -eq '"' -and $h0[$h0.Length - 1] -eq '"') { $hdr = $h0.Substring(1, $h0.Length - 2) -split '","', -1 } else { $hdr = $h0 -split ',', -1 } }
+  $iProd = ColOf $hdr @('Produto') 0
+  $iNome = ColOf $hdr @('Nome') 1
+  $iWpp  = ColOf $hdr @('WhatsApp', 'Telefone', 'Celular', 'Whatsapp') -1
+  $iMail = ColOf $hdr @('Email', 'E-mail') 2
+  $iData = ColOf $hdr @('Data') 3
+  $iFat  = ColOf $hdr @('Faturamento') 6
+  $iSrc  = ColOf $hdr @('utm_source') 8
+  $need = ($iProd, $iNome, $iMail, $iData, $iFat | Measure-Object -Maximum).Maximum
+  Write-Host ("   cols: prod=$iProd nome=$iNome wpp=$iWpp email=$iMail data=$iData fat=$iFat src=$iSrc")
   $rows = Read-Rows $file
-  # cols: Produto,Nome,Email,Data,Valor,Taxas,Faturamento,Pagamento,utm...
   $tot = 0; $totV = 0.0; $attr = 0; $attrV = 0.0
+  $mByEm = 0; $mByPh = 0; $mByNm = 0   # de onde veio cada atribuicao (email/telefone/nome)
   $unSrc = @{}   # utm_source -> @{sales;rev} for UNATTRIBUTED sales
   $byYear = @{}  # year -> @{sales;rev} for ALL FDI sales
   $script:FDI_BUYERS = @{}   # email -> 1 : TODO comprador de FDI (p/ validacao do leadscore)
   foreach ($r in $rows) {
-    if ($r.Count -lt 5) { continue }
-    if ((Deacc $r[0]) -notlike '*formula dos investimentos*') { continue }
-    $sd = DKey $r[3]; if ($sd -eq '') { continue }
-    $val = MoneyBR $r[6]   # Faturamento LIQUIDO (Valor - Taxas) — bate com o relatorio do cliente. Bruto = $r[4]
+    if ($r.Count -le $need) { continue }
+    if ((Deacc $r[$iProd]) -notlike '*formula dos investimentos*') { continue }
+    $sd = DKey $r[$iData]; if ($sd -eq '') { continue }
+    $val = MoneyBR $r[$iFat]   # Faturamento LIQUIDO (Valor - Taxas) — bate com o relatorio do cliente
     $tot++; $totV += $val
     $yr = $sd.Substring(0, 4)
     if (-not $byYear.ContainsKey($yr)) { $byYear[$yr] = @{ sales = 0; rev = 0.0 } }
     $byYear[$yr].sales += 1; $byYear[$yr].rev += $val
-    # best lead across both funnels with capture date <= sale date (closest)
-    $best = $null
-    $ek = $r[2].Trim().ToLowerInvariant()
+    # best lead across all funnels with capture date <= sale date (closest). Prioridade: EMAIL > TELEFONE > NOME.
+    $best = $null; $via = ''
+    $ek = $r[$iMail].Trim().ToLowerInvariant()
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) { $script:FDI_BUYERS[$ek] = 1 }
+    # 1) EMAIL (todos os funis)
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
         $cands = $fn.emIndex[$ek]
         if ($null -eq $cands) { continue }
-        foreach ($c in $cands) {
-          if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } }
+        foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
+      }
+      if ($null -ne $best) { $via = 'em' }
+    }
+    # 2) TELEFONE/WhatsApp (todos os funis) — sinal forte, agora que a planilha de vendas tem a coluna
+    if ($null -eq $best -and $iWpp -ge 0 -and $r.Count -gt $iWpp) {
+      $pk = PhKey $r[$iWpp]
+      if ($pk.Length -ge 8) {
+        foreach ($fn in $funnels) {
+          $cands = $fn.phIndex[$pk]
+          if ($null -eq $cands) { continue }
+          foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
         }
+        if ($null -ne $best) { $via = 'ph' }
       }
     }
-    # Fallback DIARIO: planilha de vendas NAO tem telefone -> nome completo como 2o sinal (email tem prioridade).
-    # Pega o comprador que se cadastrou no diario com um email e comprou com outro. Trava: nome+sobrenome, captacao <= venda.
+    # 3) NOME completo (so DIARIO, anti-xara) — ultimo recurso qdo email e telefone nao bateram
     if ($null -eq $best) {
-      $nk = NKey $r[1]                                  # exige nome+sobrenome (>=2 tokens) e casa o nome COMPLETO
+      $nk = NKey $r[$iNome]                             # exige nome+sobrenome (>=2 tokens) e casa o nome COMPLETO
       if ($nk -ne '') {
         foreach ($fn in $funnels) {
           if ($fn.key -ne 'diario' -or $null -eq $fn.nameIndex) { continue }
@@ -461,19 +496,21 @@ function Attribute-Sales($funnels) {
           if ($emails.Count -gt 1) { continue }
           foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
         }
+        if ($null -ne $best) { $via = 'nm' }
       }
     }
     if ($null -ne $best) {
       $best.node.rev += $val; $best.node.sales += 1; $attr++; $attrV += $val
+      if ($via -eq 'em') { $mByEm++ } elseif ($via -eq 'ph') { $mByPh++ } elseif ($via -eq 'nm') { $mByNm++ }
     } else {
-      # UNATTRIBUTED (nao rastreada): tally by utm_source (col idx 8)
-      $src = if ($r.Count -gt 8) { $r[8].Trim().ToLowerInvariant() } else { '' }
+      # UNATTRIBUTED (nao rastreada): tally by utm_source
+      $src = if ($iSrc -ge 0 -and $r.Count -gt $iSrc) { $r[$iSrc].Trim().ToLowerInvariant() } else { '' }
       if ($src -eq '') { $src = '(sem utm_source)' }
       if (-not $unSrc.ContainsKey($src)) { $unSrc[$src] = @{ sales = 0; rev = 0.0 } }
       $unSrc[$src].sales += 1; $unSrc[$src].rev += $val
     }
   }
-  Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV)
+  Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2} | via email={5} telefone={6} nome={7}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV, $mByEm, $mByPh, $mByNm)
   $unArr = New-Object System.Collections.ArrayList
   foreach ($k in $unSrc.Keys) { [void]$unArr.Add(@{ src = $k; sales = $unSrc[$k].sales; rev = [Math]::Round($unSrc[$k].rev, 2) }) }
   $unArr = @($unArr | Sort-Object { - $_.rev })
