@@ -309,26 +309,25 @@
     var showScore = st.hi >= D.surveyStart;
     var isDaily = key === 'diario';
     if (isDaily) {
-      var sub = DSUB;
-      var subnav = '<div class="dsub-nav" id="dsub-' + key + '">' +
-        dsubBtn('otim', '🎯 Otimização · A/B/C', sub) + dsubBtn('roas', '↩️ ROAS Projetado', sub) + dsubBtn('perfil', '👤 Perfil do Lead', sub) + '</div>';
-      var dview;
+      var sub = DSUB, dview;
       if (sub === 'roas') {
         dview = dailyRoasStrip(a) + receitaBlock(a) +
           '<div class="section-title">ROAS projetado por campanha e anúncio <span class="st-line"></span></div>' + roasBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       } else if (sub === 'perfil') {
         dview = perfilDiario(f, a);
+      } else if (sub === 'consol') {
+        dview = consolidado(f, a);
       } else {
-        dview = chartsBlock(key) +
+        dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        kpiRow(key, a, false) + (showScore ? abcStrip(a) : coverageBanner()) + subnav + dview;
+        (sub === 'consol' ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
-      wireTrees(key); wireDsub(key);
+      wireTrees(key);
       return;
     }
     var optSection = '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
@@ -344,12 +343,30 @@
     drawCharts(key, a);
     wireTrees(key);
   }
-  var DSUB = 'otim';   // sub-aba ativa do diario: otim | roas | perfil
-  function dsubBtn(id, lab, cur) { return '<button class="dsub' + (id === cur ? ' active' : '') + '" data-dsub="' + id + '">' + lab + '</button>'; }
-  function wireDsub(key) {
-    Array.prototype.forEach.call(document.querySelectorAll('#dsub-' + key + ' .dsub'), function (b) {
-      b.addEventListener('click', function () { DSUB = b.getAttribute('data-dsub'); renderFunnel(key); });
-    });
+  var DSUB = 'otim';   // aba de topo ativa (= visao do diario): otim | roas | perfil | consol
+  // ---- CONSOLIDADO: ROAS + faturamento total do diario (Meta+Google, cruzamento email+telefone) ----
+  function consolidado(f, a) {
+    var gRoas = a.gSp ? a.gRev / a.gSp : null, mRoas = a.mSp ? a.mRev / a.mSp : null;
+    var ticket = a.sales ? a.rev / a.sales : null, cac = a.sales ? a.spend / a.sales : null;
+    var conv = a.leads ? a.sales / a.leads : null;
+    function prow(nm, dot, sp, rev, sl, r) {
+      var rc = r == null ? 'var(--muted)' : (r >= 1 ? 'var(--teal)' : r >= 0.5 ? 'var(--gold)' : 'var(--red)');
+      return '<tr><td class="lbl"><span class="dot ' + dot + '"></span>' + nm + '</td><td>' + fBRL0(sp) + '</td><td>' + fBRL0(rev) + '</td><td>' + fInt(sl) + '</td><td style="color:' + rc + ';font-weight:700">' + (r == null ? '—' : fRoas(r)) + '</td></tr>';
+    }
+    return '<div class="section-title">Consolidado · Webinar Diário <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· ROAS e faturamento total (cruzamento e-mail + telefone)</span><span class="st-line"></span></div>' +
+      dailyRoasStrip(a) +
+      '<div class="receita-grid">' +
+        card3('💵 Faturamento (FDI)', fBRL0(a.rev), '<span>atribuído por e-mail + WhatsApp</span>') +
+        card3('🛒 Vendas', fInt(a.sales), '<span>Ticket <span class="kv">' + money(ticket) + '</span></span><span>CAC <span class="kv">' + money(cac) + '</span></span>') +
+        card3('💰 Investido', fBRL0(a.spend), '<span><span class="dot m"></span>Meta ' + fBRL0(a.mSp) + '</span><span><span class="dot g"></span>Google ' + fBRL0(a.gSp) + '</span>') +
+        card3('📈 Conv. lead→venda', fPct(conv, 2), '<span>' + fInt(a.leads) + ' leads captados</span>') +
+      '</div>' +
+      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Plataforma</th><th>Investido</th><th>Receita</th><th>Vendas</th><th>ROAS</th></tr></thead><tbody>' +
+        prow('Meta Ads', 'm', a.mSp, a.mRev, a.mSl, mRoas) +
+        prow('Google Ads', 'g', a.gSp, a.gRev, a.gSl, gRoas) +
+        '<tr class="tot">' + prow('Total', '', a.spend, a.rev, a.sales, a.roas).replace('<tr>', '').replace('</tr>', '') + '</tr>' +
+      '</tbody></table></div>' +
+      '<div class="banner">🔎 <div>Faturamento e ROAS do funil diário inteiro (Meta + Google). Uma venda do FDI conta pro diário quando o <b>e-mail</b> do comprador bate num lead do diário, e o <b>WhatsApp confirma</b> quando existir na venda (hoje ~99% das vendas do FDI vêm sem WhatsApp, então o e-mail sustenta; o telefone vira double-check automático conforme o checkout for preenchendo). Atualiza a cada 3h.</div></div>';
   }
 
   function coverageBanner() {
@@ -644,7 +661,7 @@
     list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
   }
   function dailyBanner() {
-    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>Custo por Lead A</b> — quanto você paga por um lead <b>faixa A</b> (score ≥ 7 no leadscore do Playbook, converte ~2× a média). É o gasto ÷ leads A estimados (fração de A dos respondentes projetada sobre todos os leads, neutra à taxa de resposta). <b>Ação:</b> <b>Acelerar</b> quando o Custo/Lead A é barato (≤ 0,8× a mediana do funil) · <b>Evitar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Ordena do A mais barato pro mais caro. O leadscore A/B/C completo fica na aba <b>Perfil do Lead</b>; o ROAS na aba <b>ROAS Projetado</b>. Atualiza a cada 3h.</div></div>';
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>Custo por Lead A</b> — quanto você paga por um lead <b>faixa A</b> (o perfil de "escalar" do protocolo: já investiu, capacidade de aporte R$500–2.000, renda ≥ R$5.000, 51+ ou "não saber onde investir"). É o gasto ÷ leads A estimados (fração de A dos respondentes projetada sobre todos os leads). <b>Ação:</b> <b>Acelerar</b> quando o Custo/Lead A é barato (≤ 0,8× a mediana) · <b>Evitar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Ordena do A mais barato pro mais caro. A régua completa A/B/C fica na aba <b>Perfil do Lead</b>. Atualiza a cada 3h.</div></div>';
   }
   function roasBanner() {
     return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
@@ -657,7 +674,7 @@
     return '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:12px">Leadscore A / B / C — respostas rastreadas no período</div>' +
       '<div class="score-strip"><div class="score-bar">' + seg('seg-a', wa, a.la) + seg('seg-b', wb, a.lb) + seg('seg-c', wc, a.lc) + '</div>' +
       '<div class="score-legend">' +
-      liScore('var(--teal)', 'A · forte', 'score ≥ 7', a.la, tot) + liScore('var(--gold)', 'B · médio', '1 a 6', a.lb, tot) + liScore('var(--red)', 'C · evitar', '≤ 0', a.lc, tot) +
+      liScore('var(--teal)', 'A · escalar', 'perseguir', a.la, tot) + liScore('var(--gold)', 'B · cuidado', 'manter', a.lb, tot) + liScore('var(--red)', 'C · excluir', 'cortar', a.lc, tot) +
       '</div></div></div>';
   }
   // ---- PERFIL DO LEAD (sub-aba do diario) ----
@@ -665,9 +682,9 @@
     var P = D.pesquisa;
     var tot = (a.la + a.lb + a.lc) || 1;
     var cards = '<div class="kpi-row">' +
-      card3('🟢 Lead A · forte', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · score ≥ 7 · escalar/seed</span>') +
-      card3('🟡 Lead B · médio', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · score 1–6 · manter</span>') +
-      card3('🔴 Lead C · evitar', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · score ≤ 0 · excluir</span>') +
+      card3('🟢 Lead A · escalar', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · bate um sinal de Escalar · perseguir</span>') +
+      card3('🟡 Lead B · cuidado', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · nem A nem C · manter</span>') +
+      card3('🔴 Lead C · excluir', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · bate uma regra de exclusão · cortar</span>') +
       card3('📝 Respostas no período', fInt(a.respTotal), '<span>base do perfil (pesquisa_diario)</span>') +
       '</div>';
     var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · todas as respostas)</span><span class="st-line"></span></div>' +
@@ -676,17 +693,24 @@
       cards + abcRuler() + dims + validationPanel();
   }
   function abcRuler() {
-    function rr2(t, p) { var col = p >= 3 ? 'var(--teal)' : p >= 1 ? 'var(--gold)' : p < 0 ? 'var(--red)' : 'var(--muted)'; return '<tr><td style="color:var(--muted)">' + t + '</td><td class="pt" style="color:' + col + '">' + (p > 0 ? '+' + p : p) + '</td></tr>'; }
-    return '<details class="ruler" open><summary>Régua do leadscore A/B/C (Playbook · 6 perguntas com sinal)</summary>' +
-      '<table class="ruler-tbl"><thead><tr><th>Pergunta / resposta</th><th style="text-align:center">Pontos</th></tr></thead><tbody>' +
-      rgrp('Valor já investido') + rr2('Acima de R$ 100.000', 5) + rr2('R$ 50.000 a R$ 100.000', 4) + rr2('Até R$ 50.000', 3) + rr2('Ainda não investi', 0) +
-      rgrp('Aporte mensal') + rr2('R$ 500 a R$ 2.000', 4) + rr2('R$ 100 a R$ 500 · acima de R$ 2.000', 2) + rr2('Até R$ 100', 0) + rr2('Não consigo investir agora', -1) +
-      rgrp('Renda mensal') + rr2('Acima de R$ 10.000', 4) + rr2('R$ 5.000 a R$ 10.000', 2) + rr2('R$ 2.000 a R$ 5.000', 1) + rr2('Até R$ 2.000', 0) + rr2('Não possuo renda', -2) +
-      rgrp('Idade') + rr2('61 anos ou mais', 2) + rr2('51 a 60 anos', 1) + rr2('Até 50 anos', 0) +
-      rgrp('O que mais te trava') + rr2('Não saber onde investir · falta de tempo', 2) + rr2('Falta de confiança · tarde demais', 1) + rr2('Falta de dinheiro para começar', -1) + rr2('Medo de perder dinheiro', -2) +
-      rgrp('Resultado esperado') + rr2('Investir sem medo e com clareza', 2) + rr2('Montar meus primeiros investimentos', 1) + rr2('Por onde começar · renda · poupança', 0) +
-      '</tbody></table>' +
-      '<div style="padding:6px 14px 14px;color:var(--muted);font-size:12px">Nível de investidor e Motivação ficam de fora (redundantes). Faixas: <b style="color:var(--teal)">A ≥ 7</b> · <b style="color:var(--gold)">B 1–6</b> · <b style="color:var(--red)">C ≤ 0</b>.</div>' +
+    function rl(cls, cond) { return '<div class="rl ' + cls + '"><code>' + cond + '</code></div>'; }
+    return '<details class="ruler" open><summary>Régua do leadscore A / B / C — por regras (FDI · Protocolo de Otimização)</summary>' +
+      '<div style="padding:10px 14px 4px">' +
+      '<div class="rl-h" style="color:var(--red)">🔴 C · EXCLUIR — bate em qualquer uma (prioridade máxima):</div>' +
+      rl('c', 'Não possuo renda &nbsp;<b>E</b>&nbsp; aporte ≤ R$ 100 (Até R$ 100 ou "não consigo investir agora")') +
+      rl('c', 'Não possuo renda &nbsp;<b>E</b>&nbsp; trava = medo de perder dinheiro <b>ou</b> falta de dinheiro para começar') +
+      rl('c', 'Idade ≤ 50 &nbsp;<b>E</b>&nbsp; medo de perder dinheiro &nbsp;<b>E</b>&nbsp; aporte ≤ R$ 100') +
+      rl('c', 'Nunca investi &nbsp;<b>E</b>&nbsp; não consigo investir agora &nbsp;<b>E</b>&nbsp; falta de dinheiro para começar') +
+      '<div class="rl-h" style="color:var(--teal);margin-top:14px">🟢 A · ESCALAR — não sendo C, bate em qualquer um:</div>' +
+      rl('a', 'Já investiu qualquer valor (≠ "ainda não investi")') +
+      rl('a', 'Aporte de R$ 500 a R$ 2.000 por mês') +
+      rl('a', 'Renda ≥ R$ 5.000') +
+      rl('a', '51 anos ou mais') +
+      rl('a', 'Trava = não saber onde investir') +
+      '<div class="rl-h" style="color:var(--gold);margin-top:14px">🟡 B · CUIDADO — todo o resto (nem A nem C)</div>' +
+      '<p style="color:var(--muted);font-size:12.5px;margin:6px 0 0">Converte abaixo da média mas carrega volume de venda alto demais para sair (nunca investiu, medo, renda ≤ R$ 2.000, aporte R$ 100–500). Não excluir.</p>' +
+      '</div>' +
+      '<div style="padding:4px 14px 14px;color:var(--muted);font-size:12px">Segue as 3 seções do protocolo. Prioridade <b>C › A › B</b> — um lead que bate regra de exclusão nunca vira A.</div>' +
       '</details>';
   }
   // ROAS TOTAL da captação diária (Meta+Google consolidado) — atribuição por e-mail (+ WhatsApp confirmando)
@@ -1092,19 +1116,23 @@
      ROUTER
   ===================================================================== */
   var mounted = {};
+  // A dash e so o funil DIARIO agora: as abas de topo = as visoes do diario (otim/roas/perfil/consol).
   function show(tab) {
-    if (tab !== 'pesquisa' && tab !== 'vendas' && !D[tab]) tab = 'segunda';
+    var subs = { otim: 1, roas: 1, perfil: 1, consol: 1 };
+    if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-    Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-' + tab); });
-    if (!mounted[tab]) { mounted[tab] = true; if (tab === 'pesquisa') mountPesquisa(); else if (tab === 'vendas') mountVendas(); else mountFunnel(tab); }
+    Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-diario'); });
+    DSUB = tab;
+    if (!mounted.diario) { mounted.diario = true; mountFunnel('diario'); }
+    else renderFunnel('diario');
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
-  window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'segunda'); });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });
 
   // header meta
   var gen = 'Atualizado ' + (D.generatedAtBR || '') + ' (BRT)';
   $('#genAt').textContent = gen; $('#footGen').textContent = gen;
 
-  show(location.hash.slice(1) || 'segunda');
+  show(location.hash.slice(1) || 'otim');
 })();

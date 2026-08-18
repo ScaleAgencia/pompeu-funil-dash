@@ -220,63 +220,35 @@ function TierOf($score) {
   return 'f'
 }
 
-# ======= LEADSCORE A/B/C do DIARIO (Playbook, holdout AUC 0,674) =========
-#  6 perguntas com sinal (nivel e motivacao ficam de fora, redundantes).
-#  Faixas: A >= 7 (escalar/seed) · B 1..6 (manter) · C <= 0 (evitar).
-function AbcValor($a) {   # Valor total ja investido
-  $t = Deacc $a
-  if ($t -like '*acima*100.000*') { return 5 }
-  if ($t -like '*50.000*100.000*') { return 4 }
-  if ($t -like '*10.000*50.000*') { return 3 }
-  if ($t -like '*ate*10.000*' -or $t -like '*ate r 10*') { return 3 }
-  return 0                                     # ainda nao investi / vazio
-}
-function AbcAporte($a) {  # Quanto consegue investir por mes
-  $t = Deacc $a
-  if ($t -like '*nao consigo*') { return -1 }
-  if ($t -like '*100*500*') { return 2 }
-  if ($t -like '*500*1.000*') { return 4 }
-  if ($t -like '*1.000*2.000*') { return 4 }
-  if ($t -like '*acima*2.000*') { return 2 }
-  return 0                                     # ate R$100 / vazio
-}
-function AbcRenda($a) {   # Renda mensal
-  $t = Deacc $a
-  if ($t -like '*possuo*') { return -2 }        # nao possuo renda
-  if ($t -like '*acima*10.000*') { return 4 }
-  if ($t -like '*5.000*10.000*') { return 2 }
-  if ($t -like '*2.000*5.000*') { return 1 }
-  return 0                                     # ate R$2.000 / vazio
-}
-function AbcIdade($a) {   # Idade
-  $t = Deacc $a
-  if ($t -like '*61 anos*' -or $t -like '*61+*') { return 2 }
-  if ($t -like '*51 a 60*' -or $t -like '*50 anos ou mais*') { return 1 }
-  return 0
-}
-function AbcTrava($a) {   # O que mais te trava
-  $t = Deacc $a
-  if ($t -like '*medo de perder*') { return -2 }
-  if ($t -like '*falta de dinheiro*') { return -1 }
-  if ($t -like '*onde investir*') { return 2 }
-  if ($t -like '*falta de tempo*') { return 2 }
-  if ($t -like '*confianca*') { return 1 }
-  if ($t -like '*tarde demais*') { return 1 }
-  return 0
-}
-function AbcResult($a) {  # Resultado esperado da aula
-  $t = Deacc $a
-  if ($t -like '*sem medo*' -or $t -like '*com clareza*') { return 2 }
-  if ($t -like '*montar*primeiros*' -or $t -like '*primeiros investimentos*') { return 1 }
-  return 0
-}
-function ScoreABC($idade, $valor, $trava, $result, $renda, $cap) {
-  return (AbcValor $valor) + (AbcAporte $cap) + (AbcRenda $renda) + (AbcIdade $idade) + (AbcTrava $trava) + (AbcResult $result)
-}
-function BandOf($score) {
-  if ($score -ge 7) { return 'a' }
-  if ($score -ge 1) { return 'b' }
-  return 'c'                                    # score <= 0
+# ======= LEADSCORE A/B/C do DIARIO — por REGRAS (FDI Diario · Protocolo de Otimizacao) =====
+#  Segue as 3 secoes do doc. Prioridade: C (excluir) > A (escalar) > B (cuidado/resto).
+#   C = qualquer uma das 4 regras da Lista de exclusao.
+#   A = qualquer sinal da secao Escalar (nao sendo C).
+#   B = todo o resto (a secao Cuidado).
+function ClassABC($idade, $nivel, $valor, $trava, $renda, $cap) {
+  $ti = Deacc $idade; $tn = Deacc $nivel; $tv = Deacc $valor; $tt = Deacc $trava; $tr = Deacc $renda; $tc = Deacc $cap
+  $semRenda    = ($tr -like '*possuo*')                                        # Nao possuo renda
+  $apAte100    = ($tc -like '*ate*100*')                                       # Ate R$ 100
+  $apNaoConsigo= ($tc -like '*nao consigo*')                                   # Nao consigo investir agora
+  $apBaixo     = ($apAte100 -or $apNaoConsigo)                                 # aporte <= R$100
+  $ap500a2000  = ($tc -like '*500*1.000*' -or $tc -like '*1.000*2.000*')       # R$500 a R$2.000 (o ponto doce; 'acima 2.000' NAO entra)
+  $medoPerder  = ($tt -like '*medo de perder*')
+  $faltaDin    = ($tt -like '*falta de dinheiro*')
+  $naoSaber    = ($tt -like '*onde investir*')                                 # Nao saber onde investir
+  $id51        = ($ti -like '*51 a 60*' -or $ti -like '*61 anos*' -or $ti -like '*50 anos ou mais*')
+  $idAte50     = -not $id51
+  $nunca       = ($tn -like '*nunca investi*')
+  $jaInvestiu  = -not ($tv -eq '' -or $tv -like '*ainda nao investi*' -or $tv -like '*nao investi*')
+  $renda5      = ($tr -like '*5.000*10.000*' -or $tr -like '*acima*10.000*')   # renda >= R$5.000
+  # ---- C : LISTA DE EXCLUSAO (qualquer regra) ----
+  if ( ($semRenda -and $apBaixo) `
+    -or ($semRenda -and ($medoPerder -or $faltaDin)) `
+    -or ($idAte50 -and $medoPerder -and $apBaixo) `
+    -or ($nunca -and $apNaoConsigo -and $faltaDin) ) { return 'c' }
+  # ---- A : ESCALAR (qualquer sinal) ----
+  if ($id51 -or $jaInvestiu -or $ap500a2000 -or $renda5 -or $naoSaber) { return 'a' }
+  # ---- B : CUIDADO / resto ----
+  return 'b'
 }
 
 # ---- attribution key cleaners ------------------------------------------
@@ -438,7 +410,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $idade = $r[3]; $nivel = $r[4]; $valor = $r[5]; $trava = $r[6]; $result = $r[7]; $renda = $r[8]; $cap = $r[9]; $motiv = $r[10]
     $score = ScoreOf $idade $nivel $valor $trava $result $renda $cap $motiv
     $tier = TierOf $score
-    $band = if ($abcScore) { BandOf (ScoreABC $idade $valor $trava $result $renda $cap) } else { '' }
+    $band = if ($abcScore) { ClassABC $idade $nivel $valor $trava $renda $cap } else { '' }
     $respTot++
     $tierTot[$tier]++
     if ($band -ne '') { $abcTot[$band]++ }
