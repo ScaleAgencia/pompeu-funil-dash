@@ -736,20 +736,29 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
     }
   }
   $bt = @{ q = @{ n = 0; b = 0 }; m = @{ n = 0; b = 0 }; f = @{ n = 0; b = 0 } }
-  $prof = @{}
-  foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $prof[$dk] = @{} }
+  $abc = @{ a = @{ n = 0; b = 0 }; b = @{ n = 0; b = 0 }; c = @{ n = 0; b = 0 } }   # A/B/C x compra (aderencia)
+  $prof = @{}; $aprof = @{}   # perfil do COMPRADOR e perfil do LEAD A
+  foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $prof[$dk] = @{}; $aprof[$dk] = @{} }
   foreach ($e in $leads.Keys) {
     $x = $leads[$e]; $t = TierOf $x.sc; $bought = $buyers.ContainsKey($e)
+    $band = ClassABC $x.idade $x.nivel $x.valor $x.trava $x.renda $x.cap
     $bt[$t].n++; if ($bought) { $bt[$t].b++ }
+    $abc[$band].n++; if ($bought) { $abc[$band].b++ }
     if ($bought) { foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }; if (-not $prof[$dk].ContainsKey($a)) { $prof[$dk][$a] = 0 }; $prof[$dk][$a]++ } }
+    if ($band -eq 'a') { foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }; if (-not $aprof[$dk].ContainsKey($a)) { $aprof[$dk][$a] = 0 }; $aprof[$dk][$a]++ } }
   }
-  $profArr = New-Object System.Collections.ArrayList
-  foreach ($dm in $DIMS) {
-    $dk = $dm.key; $top = ''; $topN = 0; $totB = 0
-    foreach ($a in $prof[$dk].Keys) { $totB += $prof[$dk][$a]; if ($prof[$dk][$a] -gt $topN) { $topN = $prof[$dk][$a]; $top = $a } }
-    [void]$profArr.Add(@{ key = $dk; label = $dm.label; top = $top; n = $topN; tot = $totB })
+  function TopProf($h, $dims) {
+    $arr = New-Object System.Collections.ArrayList
+    foreach ($dm in $dims) {
+      $dk = $dm.key; $top = ''; $topN = 0; $tot = 0
+      foreach ($a in $h[$dk].Keys) { $tot += $h[$dk][$a]; if ($h[$dk][$a] -gt $topN) { $topN = $h[$dk][$a]; $top = $a } }
+      [void]$arr.Add(@{ key = $dk; label = $dm.label; top = $top; n = $topN; tot = $tot })
+    }
+    return @($arr)
   }
-  return @{ matCut = $matCut; leads = $leads.Count; buyers = ($bt.q.b + $bt.m.b + $bt.f.b); tier = $bt; profile = @($profArr) }
+  $profArr = TopProf $prof $DIMS
+  $aProfArr = TopProf $aprof $DIMS
+  return @{ matCut = $matCut; leads = $leads.Count; buyers = ($bt.q.b + $bt.m.b + $bt.f.b); tier = $bt; abc = $abc; profile = @($profArr); aProfile = @($aProfArr) }
 }
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
 $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')

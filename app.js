@@ -690,7 +690,43 @@
     var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · todas as respostas)</span><span class="st-line"></span></div>' +
       '<div class="dims-grid">' + arr(P.dims).map(function (dm) { return dimCard(dm, 'diario'); }).join('') + '</div>';
     return '<div class="section-title">Perfil do lead · Webinar Diário <span class="st-line"></span></div>' +
-      cards + abcRuler() + dims + validationPanel();
+      cards + aderenciaPanel() + abcRuler() + dims;
+  }
+  // ADERENCIA: cruza o nosso Lead A com quem REALMENTE compra o FDI (auto a cada venda).
+  function aderenciaPanel() {
+    var v = D.validation;
+    if (!v || !v.abc) return '';
+    var A = v.abc.a, B = v.abc.b, C = v.abc.c;
+    var totN = A.n + B.n + C.n, totB = A.b + B.b + C.b;
+    var avg = totN ? totB / totN : 0;
+    function convCard(nm, x, color) {
+      var conv = x.n ? x.b / x.n : 0, lift = avg ? conv / avg : 0;
+      return '<div class="card kpi"><div class="klabel">' + nm + '</div><div class="kval" style="color:' + color + '">' + fPct(conv, 2) + '</div><div class="ksub"><span>' + fInt(x.b) + '/' + fInt(x.n) + ' compraram · lift ' + (lift ? lift.toFixed(2).replace('.', ',') + '×' : '—') + '</span></div></div>';
+    }
+    var aProf = {}; arr(v.aProfile).forEach(function (p) { aProf[p.key] = p; });
+    var nMatch = 0, nDim = 0;
+    var rows = arr(v.profile).map(function (bp) {
+      var ap = aProf[bp.key] || {};
+      if (!bp.top || !ap.top) return '';
+      nDim++; var match = (ap.top === bp.top); if (match) nMatch++;
+      var aPct = ap.tot ? Math.round(ap.n / ap.tot * 100) : 0, bPct = bp.tot ? Math.round(bp.n / bp.tot * 100) : 0;
+      var ct = function (p) { return ' <span style="color:var(--muted2);font-size:11px">' + p + '%</span>'; };
+      return '<tr><td class="lbl">' + esc(bp.label) + '</td>' +
+        '<td class="lbl">' + esc(ap.top) + ct(aPct) + '</td>' +
+        '<td class="lbl">' + esc(bp.top) + ct(bPct) + '</td>' +
+        '<td style="text-align:center">' + (match ? '<span style="color:var(--teal);font-weight:700">✓ bate</span>' : '<span style="color:var(--gold)">✕ difere</span>') + '</td></tr>';
+    }).join('');
+    var ader = nDim ? Math.round(nMatch / nDim * 100) : 0;
+    var acolor = ader >= 70 ? 'var(--teal)' : ader >= 45 ? 'var(--gold)' : 'var(--red)';
+    return '<div class="section-title" style="margin-top:6px">✅ Aderência do Lead A ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o perfil dominante do <b>nosso Lead A</b> com o de <b>quem realmente compra</b>, dimensão a dimensão — quanto mais "bate", mais o nosso A está mirando o comprador certo.</div></div>' +
+      '<div class="kpi-row">' +
+        convCard('🟢 Lead A converte', A, 'var(--teal)') +
+        convCard('🟡 Lead B converte', B, 'var(--gold)') +
+        convCard('🔴 Lead C converte', C, 'var(--red)') +
+        '<div class="card kpi"><div class="klabel">🎯 Aderência A × comprador</div><div class="kval" style="color:' + acolor + '">' + ader + '%</div><div class="ksub"><span>' + nMatch + ' de ' + nDim + ' dimensões batem</span></div></div>' +
+      '</div>' +
+      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Dimensão</th><th style="text-align:left">Nosso Lead A (+ comum)</th><th style="text-align:left">Comprador FDI (+ comum)</th><th style="text-align:center">Aderência</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
   function abcRuler() {
     function rl(cls, cond) { return '<div class="rl ' + cls + '"><code>' + cond + '</code></div>'; }
