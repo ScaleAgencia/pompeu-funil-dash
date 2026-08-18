@@ -138,6 +138,17 @@ function NKey($s) {
   if ($t.IndexOf(' ') -lt 0) { return '' }   # exige nome + sobrenome (evita xara de 1 token)
   return $t
 }
+# Canoniza nome de campanha/conjunto/anuncio p/ CASAR query x lead do mesmo jeito.
+# Resolve a ambiguidade do '+' no utm (espaco vira '+', e '+' literal no fim tb) — ex: query "IDADE 40+" vs lead "IDADE 40".
+function Canon($s) {
+  if ($null -eq $s) { return '' }
+  $t = ([string]$s).Replace('+', ' ')
+  try { $t = [Uri]::UnescapeDataString($t) } catch {}
+  $t = ($t -replace '\s+', ' ').Trim().TrimEnd('+', ' ')
+  return $t
+}
+# nome de query: canoniza se o funil usa utm codificado ($dec), senao so trim
+function QN($s, $dec) { if ($dec) { return (Canon $s) } else { return ([string]$s).Trim() } }
 # Acha o indice de uma coluna pelo NOME do cabecalho (deaccent, case-insensitive); usa $default se nao achar.
 function ColOf($hdr, $names, $default) {
   foreach ($nm in $names) {
@@ -259,9 +270,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   foreach ($r in $rows) {
     if ($r.Count -lt 6) { continue }
     $d = DKey $r[0]; if ($d -eq '') { continue }
-    $ci = Intern $CampArr $CampMap ($r[1].Trim())
-    if ($metaAdBeforeSet) { $ai = Intern $AdArr $AdMap ($r[2].Trim()); $si = Intern $SetArr $SetMap ($r[3].Trim()) }
-    else                  { $si = Intern $SetArr $SetMap ($r[2].Trim()); $ai = Intern $AdArr $AdMap ($r[3].Trim()) }
+    $ci = Intern $CampArr $CampMap (QN $r[1] $decodeUtm)
+    if ($metaAdBeforeSet) { $ai = Intern $AdArr $AdMap (QN $r[2] $decodeUtm); $si = Intern $SetArr $SetMap (QN $r[3] $decodeUtm) }
+    else                  { $si = Intern $SetArr $SetMap (QN $r[2] $decodeUtm); $ai = Intern $AdArr $AdMap (QN $r[3] $decodeUtm) }
     $n = GNode $grain $d 'm' $ci $si $ai
     $n.sp += (PNum $r[4]) * $TAX
     $n.im += (PNum $r[5])
@@ -276,9 +287,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     foreach ($r in $rows) {
       if ($r.Count -lt 5) { continue }
       $d = DKey $r[0]; if ($d -eq '') { continue }
-      $ci = Intern $CampArr $CampMap ($r[1].Trim())
-      $si = Intern $SetArr  $SetMap  ($r[2].Trim())
-      $ai = Intern $AdArr   $AdMap   ($r[3].Trim())
+      $ci = Intern $CampArr $CampMap (QN $r[1] $decodeUtm)
+      $si = Intern $SetArr  $SetMap  (QN $r[2] $decodeUtm)
+      $ai = Intern $AdArr   $AdMap   (QN $r[3] $decodeUtm)
       $n = GNode $grain $d 'g' $ci $si $ai
       $n.sp += (PNum $r[4])          # google: no tax
       $n.im += (PNum $r[5])
@@ -323,9 +334,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($p -eq 'o') {
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
-      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { if ($decodeUtm) { $cv = [Uri]::UnescapeDataString($cv.Replace('+', ' ')) }; $cv = $cv.Trim(); if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
-      $sv = $r[7]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { if ($decodeUtm) { $sv = [Uri]::UnescapeDataString($sv.Replace('+', ' ')) }; $sv = $sv.Trim(); if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
-      $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { if ($decodeUtm) { $av = [Uri]::UnescapeDataString($av.Replace('+', ' ')) }; $av = $av.Trim(); if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
+      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
+      $sv = $r[7]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
+      $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = if ($decodeUtm) { Canon $av } else { $av.Trim() }; if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
     }
     $gk = "$d|$p|$ci|$si|$ai"
     $n = $grain[$gk]
