@@ -661,7 +661,7 @@
     list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
   }
   function dailyBanner() {
-    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>Custo por Lead A</b> — quanto você paga por um lead <b>faixa A</b> (o perfil de "escalar" do protocolo: já investiu, capacidade de aporte R$500–2.000, renda ≥ R$5.000, 51+ ou "não saber onde investir"). É o gasto ÷ leads A estimados (fração de A dos respondentes projetada sobre todos os leads). <b>Ação:</b> <b>Acelerar</b> quando o Custo/Lead A é barato (≤ 0,8× a mediana) · <b>Evitar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Ordena do A mais barato pro mais caro. A régua completa A/B/C fica na aba <b>Perfil do Lead</b>. Atualiza a cada 3h.</div></div>';
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>Custo por Lead A</b> — quanto você paga por um lead <b>faixa A</b> (o seed do protocolo: <b>51+ E</b> capacidade — aporte R$500–2.000/mês <b>ou</b> renda ≥ R$5.000; ~10% da base, converte 2,12%). É o gasto ÷ leads A estimados (fração de A dos respondentes projetada sobre todos os leads). <b>Ação:</b> <b>Acelerar</b> quando o Custo/Lead A é barato (≤ 0,8× a mediana) · <b>Evitar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Ordena do A mais barato pro mais caro. A régua completa A/B/C fica na aba <b>Perfil do Lead</b>. Atualiza a cada 3h.</div></div>';
   }
   function roasBanner() {
     return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
@@ -674,7 +674,7 @@
     return '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:12px">Leadscore A / B / C — respostas rastreadas no período</div>' +
       '<div class="score-strip"><div class="score-bar">' + seg('seg-a', wa, a.la) + seg('seg-b', wb, a.lb) + seg('seg-c', wc, a.lc) + '</div>' +
       '<div class="score-legend">' +
-      liScore('var(--teal)', 'A · escalar', 'perseguir', a.la, tot) + liScore('var(--gold)', 'B · cuidado', 'manter', a.lb, tot) + liScore('var(--red)', 'C · excluir', 'cortar', a.lc, tot) +
+      liScore('var(--teal)', 'A · seed', 'perseguir', a.la, tot) + liScore('var(--gold)', 'B · miolo', 'manter', a.lb, tot) + liScore('var(--red)', 'C · excluir', 'cortar', a.lc, tot) +
       '</div></div></div>';
   }
   // ---- PERFIL DO LEAD (sub-aba do diario) ----
@@ -682,8 +682,8 @@
     var P = D.pesquisa;
     var tot = (a.la + a.lb + a.lc) || 1;
     var cards = '<div class="kpi-row">' +
-      card3('🟢 Lead A · escalar', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · bate um sinal de Escalar · perseguir</span>') +
-      card3('🟡 Lead B · cuidado', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · nem A nem C · manter</span>') +
+      card3('🟢 Lead A · seed', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · 51+ E capacidade (aporte R$500–2k ou renda ≥5k) · perseguir</span>') +
+      card3('🟡 Lead B · miolo', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · nem A nem C · manter</span>') +
       card3('🔴 Lead C · excluir', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · bate uma regra de exclusão · cortar</span>') +
       card3('📝 Respostas no período', fInt(a.respTotal), '<span>base do perfil (pesquisa_diario)</span>') +
       '</div>';
@@ -737,16 +737,13 @@
       rl('c', 'Não possuo renda &nbsp;<b>E</b>&nbsp; trava = medo de perder dinheiro <b>ou</b> falta de dinheiro para começar') +
       rl('c', 'Idade ≤ 50 &nbsp;<b>E</b>&nbsp; medo de perder dinheiro &nbsp;<b>E</b>&nbsp; aporte ≤ R$ 100') +
       rl('c', 'Nunca investi &nbsp;<b>E</b>&nbsp; não consigo investir agora &nbsp;<b>E</b>&nbsp; falta de dinheiro para começar') +
-      '<div class="rl-h" style="color:var(--teal);margin-top:14px">🟢 A · ESCALAR — não sendo C, bate em qualquer um:</div>' +
-      rl('a', 'Já investiu qualquer valor (≠ "ainda não investi")') +
-      rl('a', 'Aporte de R$ 500 a R$ 2.000 por mês') +
-      rl('a', 'Renda ≥ R$ 5.000') +
-      rl('a', '51 anos ou mais') +
-      rl('a', 'Trava = não saber onde investir') +
-      '<div class="rl-h" style="color:var(--gold);margin-top:14px">🟡 B · CUIDADO — todo o resto (nem A nem C)</div>' +
-      '<p style="color:var(--muted);font-size:12.5px;margin:6px 0 0">Converte abaixo da média mas carrega volume de venda alto demais para sair (nunca investiu, medo, renda ≤ R$ 2.000, aporte R$ 100–500). Não excluir.</p>' +
+      '<div class="rl-h" style="color:var(--teal);margin-top:14px">🟢 A · SEED / ESCALAR — o "motor da campanha" (não sendo C):</div>' +
+      rl('a', '51 anos ou mais &nbsp;<b>E</b>&nbsp; (aporte R$ 500–2.000/mês &nbsp;<b>ou</b>&nbsp; renda ≥ R$ 5.000)') +
+      '<p style="color:var(--muted);font-size:12.5px;margin:6px 0 0">Faixa A da tabela de lookalike do protocolo — ~10% da base, converte 2,12% (índice 1,78×). É um <b>E</b>, não um "ou": idade alta <b>com</b> capacidade financeira real. <b>"Acima de R$ 2.000"</b> e <b>"até R$ 100"</b> NÃO entram (convertem abaixo da média).</p>' +
+      '<div class="rl-h" style="color:var(--gold);margin-top:14px">🟡 B · MIOLO — todo o resto (nem A nem C)</div>' +
+      '<p style="color:var(--muted);font-size:12.5px;margin:6px 0 0">Converte abaixo da média mas carrega volume de venda alto demais para sair (nunca investiu, medo, renda ≤ R$ 2.000, aporte R$ 100–500, 51+ sem capacidade). Não excluir — é o corpo do funil.</p>' +
       '</div>' +
-      '<div style="padding:4px 14px 14px;color:var(--muted);font-size:12px">Segue as 3 seções do protocolo. Prioridade <b>C › A › B</b> — um lead que bate regra de exclusão nunca vira A.</div>' +
+      '<div style="padding:4px 14px 14px;color:var(--muted);font-size:12px">Definições da tabela "Lookalike · Faixas A/B/C" do protocolo. Prioridade <b>C › A › B</b> — um lead que bate regra de exclusão nunca vira A.</div>' +
       '</details>';
   }
   // ROAS TOTAL da captação diária (Meta+Google consolidado) — atribuição por e-mail (+ WhatsApp confirmando)

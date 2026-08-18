@@ -221,10 +221,11 @@ function TierOf($score) {
 }
 
 # ======= LEADSCORE A/B/C do DIARIO — por REGRAS (FDI Diario · Protocolo de Otimizacao) =====
-#  Segue as 3 secoes do doc. Prioridade: C (excluir) > A (escalar) > B (cuidado/resto).
-#   C = qualquer uma das 4 regras da Lista de exclusao.
-#   A = qualquer sinal da secao Escalar (nao sendo C).
-#   B = todo o resto (a secao Cuidado).
+#  Faixas do doc (tabela "Lookalike · Faixas A, B e C"). Prioridade: C (excluir) > A (seed) > B (miolo).
+#   C = qualquer uma das 4 regras da Lista de exclusao (nivel 2 do protocolo).
+#   A = SEED APERTADO (motor da campanha): 51+ E (aporte R$500-2.000 OU renda>=R$5.000). ~10%, converte 2,12%, indice 1,78x.
+#       NAO e "qualquer sinal de escalar" (isso dava 63%). "acima de R$2.000" e "ate R$100" NAO contam (convertem <media).
+#   B = todo o resto = o miolo ("Cuidado" no doc: parece ruim mas nao pode ser excluido). ~63%.
 function ClassABC($idade, $nivel, $valor, $trava, $renda, $cap) {
   $ti = Deacc $idade; $tn = Deacc $nivel; $tv = Deacc $valor; $tt = Deacc $trava; $tr = Deacc $renda; $tc = Deacc $cap
   $semRenda    = ($tr -like '*possuo*')                                        # Nao possuo renda
@@ -245,9 +246,9 @@ function ClassABC($idade, $nivel, $valor, $trava, $renda, $cap) {
     -or ($semRenda -and ($medoPerder -or $faltaDin)) `
     -or ($idAte50 -and $medoPerder -and $apBaixo) `
     -or ($nunca -and $apNaoConsigo -and $faltaDin) ) { return 'c' }
-  # ---- A : ESCALAR (qualquer sinal) ----
-  if ($id51 -or $jaInvestiu -or $ap500a2000 -or $renda5 -or $naoSaber) { return 'a' }
-  # ---- B : CUIDADO / resto ----
+  # ---- A : SEED (motor da campanha) = 51+ E (aporte R$500-2.000 OU renda >= R$5.000) ----
+  if ($id51 -and ($ap500a2000 -or $renda5)) { return 'a' }
+  # ---- B : MIOLO / resto (nem excluir, nem seed) ----
   return 'b'
 }
 
