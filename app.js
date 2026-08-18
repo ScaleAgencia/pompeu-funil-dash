@@ -27,14 +27,14 @@
   /* ---------- aggregate a funnel over [lo,hi] ---------- */
   function agg(f, lo, hi) {
     var SS = D.surveyStart;
-    var o = { gSp: 0, mSp: 0, gLd: 0, mLd: 0, oLd: 0, gIm: 0, mIm: 0, gCk: 0, mCk: 0, mLp: 0, mRc: 0, resp: 0, f: 0, m: 0, q: 0, qSp: 0, qLd: 0,
+    var o = { gSp: 0, mSp: 0, gLd: 0, mLd: 0, oLd: 0, gIm: 0, mIm: 0, gCk: 0, mCk: 0, mLp: 0, mRc: 0, resp: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, qSp: 0, qLd: 0,
       gRev: 0, mRev: 0, oRev: 0, gSl: 0, mSl: 0, oSl: 0, days: {} };
     arr(f.daily).forEach(function (r) {
       if (r.date < lo || r.date > hi) return;
       if (r.p === 'g') { o.gSp += r.sp; o.gLd += r.ld; o.gIm += r.im; o.gCk += r.ck; o.gRev += r.rev || 0; o.gSl += r.sales || 0; }
       else if (r.p === 'm') { o.mSp += r.sp; o.mLd += r.ld; o.mIm += r.im; o.mCk += r.ck; o.mLp += r.lp; o.mRc += r.rc; o.mRev += r.rev || 0; o.mSl += r.sales || 0; }
       else { o.oLd += r.ld; o.oRev += r.rev || 0; o.oSl += r.sales || 0; }
-      o.resp += r.rs; o.f += r.f; o.m += r.m; o.q += r.q;
+      o.resp += r.rs; o.f += r.f; o.m += r.m; o.q += r.q; o.la += (r.la || 0); o.lb += (r.lb || 0); o.lc += (r.lc || 0);
       if (r.date >= SS) { o.qSp += r.sp; o.qLd += r.ld; }  // survey-era scope for qualification metrics
       var d = o.days[r.date] || (o.days[r.date] = { date: r.date, gLd: 0, mLd: 0, sp: 0, ld: 0, rev: 0 });
       if (r.p === 'g') d.gLd += r.ld; else if (r.p === 'm') d.mLd += r.ld;
@@ -96,11 +96,11 @@
     _RATES = v ? { f: rt(v.f, d.f), m: rt(v.m, d.m), q: rt(v.q, d.q) } : d;
     return _RATES;
   }
-  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, kids: {} }; }
+  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, kids: {} }; }
   function accN(n, g) {
     n.sp += g.sp; if (g.d >= D.surveyStart) { n.qsp += g.sp; n.qld += g.ld; } if (g.d <= MAT_CUTOFF) n.spMat += g.sp;
     n.rev += g.rev || 0; n.sales += g.sales || 0;
-    n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q;
+    n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q; n.la += g.la || 0; n.lb += g.lb || 0; n.lc += g.lc || 0;
   }
   function finalize(n) {
     n.children = Object.keys(n.kids).map(function (k) { return finalize(n.kids[k]); });
@@ -308,12 +308,32 @@
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
     var isDaily = key === 'diario';
-    var optSection = isDaily
-      ? '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' + dailyBanner(f) + dailyRoasStrip(a) +
-          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi) + optColDaily(f, 'm', st.lo, st.hi) + '</div>'
-      : '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
-          '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
-          '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
+    if (isDaily) {
+      var sub = DSUB;
+      var subnav = '<div class="dsub-nav" id="dsub-' + key + '">' +
+        dsubBtn('otim', '🎯 Otimização · A/B/C', sub) + dsubBtn('roas', '↩️ ROAS Projetado', sub) + dsubBtn('perfil', '👤 Perfil do Lead', sub) + '</div>';
+      var dview;
+      if (sub === 'roas') {
+        dview = dailyRoasStrip(a) + receitaBlock(a) +
+          '<div class="section-title">ROAS projetado por campanha e anúncio <span class="st-line"></span></div>' + roasBanner() +
+          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
+      } else if (sub === 'perfil') {
+        dview = perfilDiario(f, a);
+      } else {
+        dview = chartsBlock(key) +
+          '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
+          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
+      }
+      body.innerHTML =
+        (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
+        kpiRow(key, a, false) + (showScore ? abcStrip(a) : coverageBanner()) + subnav + dview;
+      if (sub === 'otim') drawCharts(key, a);
+      wireTrees(key); wireDsub(key);
+      return;
+    }
+    var optSection = '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:14px">💰 <div>Otimize a semana atual pelo resultado das <b>anteriores</b>, focado no que <b>faz vender</b>: <b>ROAS projetado</b> (lucro real das últimas ~5 semanas já maturadas) manda sempre que existe. Sem venda ainda, usa o <b>R$/venda esperada</b> — o gasto ÷ vendas que o criativo tende a gerar, ponderando cada lead pela conversão real da sua faixa (Quente vale ~2,6× Morno; Frio quase nada). É o único sinal antecipado que acompanha o lucro (o CPL de lead barato <b>não prevê venda</b>). <b>Ação:</b> ROAS maduro → <b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4; semana fresca → R$/venda barato = Acelerar, caro = Revisar, senão 🕐 <b>Maturando</b>. R$/venda colorido vs. a mediana do funil; as taxas de conversão recalibram sozinhas com o painel de compradores.</div></div>' +
+      '<div class="opt-cols">' + optCol(f, 'g', st.lo, st.hi) + optCol(f, 'm', st.lo, st.hi) + '</div>';
     body.innerHTML =
       (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '<span class="ed-hint">todas as métricas abaixo filtradas por esta semana</span></div>' : '') +
       kpiRow(key, a, false) +
@@ -323,6 +343,13 @@
       optSection;
     drawCharts(key, a);
     wireTrees(key);
+  }
+  var DSUB = 'otim';   // sub-aba ativa do diario: otim | roas | perfil
+  function dsubBtn(id, lab, cur) { return '<button class="dsub' + (id === cur ? ' active' : '') + '" data-dsub="' + id + '">' + lab + '</button>'; }
+  function wireDsub(key) {
+    Array.prototype.forEach.call(document.querySelectorAll('#dsub-' + key + ' .dsub'), function (b) {
+      b.addEventListener('click', function () { DSUB = b.getAttribute('data-dsub'); renderFunnel(key); });
+    });
   }
 
   function coverageBanner() {
@@ -547,6 +574,29 @@
   ===================================================================== */
   var MED_CPL_D = null;      // mediana do CPL do funil diario (p/ colorir + tags)
   var DAILY_SALES = false;   // o funil diario ja tem venda atribuida?
+  var DMODE = 'abc';         // modo da coluna de otimizacao do diario: 'abc' (leadscore) | 'roas'
+  // Lifts de conversao por faixa (Playbook, holdout): A ~2,0x · B ~0,95x · C ~0,43x da media.
+  var ABC_LIFT = { a: 2.0, b: 0.95, c: 0.43 };
+  function abcScored(n) { return (n.la || 0) + (n.lb || 0) + (n.lc || 0); }
+  function abcQuality(n) { var s = abcScored(n); return s ? ((n.la * ABC_LIFT.a + n.lb * ABC_LIFT.b + n.lc * ABC_LIFT.c) / s) : null; }
+  function abcTag(n) {
+    if (n.sp <= 0 && n.ld <= 0) return null;
+    var s = abcScored(n);
+    if (s < 8) return { c: 'matur', t: '🕐 Poucas resp.' };   // amostra pequena p/ julgar o mix
+    var pa = n.la / s, pc = n.lc / s, q = abcQuality(n);
+    if (pa >= 0.25 || q >= 1.25) return { c: 'acelerar', t: 'Acelerar' };   // rico em A -> escalar/seed
+    if (pc >= 0.42 || q <= 0.78) return { c: 'pausar', t: 'Evitar' };       // rico em C -> excluir/evitar
+    return { c: 'manter', t: 'Manter' };
+  }
+  function abcQColor(q) { if (q == null) return 'var(--muted)'; if (q >= 1.2) return 'var(--teal)'; if (q >= 0.9) return 'var(--gold)'; return 'var(--red)'; }
+  function abcCell(n) {
+    var s = abcScored(n);
+    if (!s) return '<div class="tr-num"><span class="qc muted" title="sem resposta de pesquisa">🕐</span></div>';
+    var pa = n.la / s * 100, pb = n.lb / s * 100, pc = n.lc / s * 100, q = abcQuality(n);
+    return '<div class="tr-num abc-c" title="A ' + fInt(n.la) + ' · B ' + fInt(n.lb) + ' · C ' + fInt(n.lc) + ' (qualidade ' + (q).toFixed(2).replace('.', ',') + '×)">' +
+      '<div class="abc-bar"><i class="a" style="width:' + pa + '%"></i><i class="b" style="width:' + pb + '%"></i><i class="c" style="width:' + pc + '%"></i></div>' +
+      '<div class="abc-pa" style="color:' + abcQColor(q) + '">A ' + Math.round(pa) + '%</div></div>';
+  }
   function dailyRoas(n) { return (n.sp > 0 && (n.sales > 0 || n.rev > 0)) ? (n.rev / n.sp) : null; }
   function dailyTag(n) {
     if (n.sp <= 0 && n.ld <= 0) return null;
@@ -568,14 +618,15 @@
     if (n.cpl >= 1.35 * MED_CPL_D) return { c: 'revisar', t: 'Revisar' };
     return { c: 'manter', t: 'Manter' };
   }
-  function countTagD(n, cls) { var c = 0; if (n.children) n.children.forEach(function (ch) { var t = dailyTag(ch); if (t && t.c === cls) c++; c += countTagD(ch, cls); }); return c; }
+  function dTag(n) { return DMODE === 'abc' ? abcTag(n) : dailyTag(n); }   // tag conforme o modo da coluna
+  function countTagD(n, cls) { var c = 0; if (n.children) n.children.forEach(function (ch) { var t = dTag(ch); if (t && t.c === cls) c++; c += countTagD(ch, cls); }); return c; }
   function sortValD(n, sk) {
     if (sk === 'name') return n.name;
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
     if (sk === 'cpl') return n.cpl;
-    if (sk === 'roas') return dailyRoas(n);
-    if (sk === 'acao') { var t = dailyTag(n); return t ? ACT_RANK[t.c] : 9; }
+    if (sk === 'q') return DMODE === 'abc' ? abcQuality(n) : dailyRoas(n);   // 5a coluna: qualidade A/B/C ou ROAS
+    if (sk === 'acao') { var t = dTag(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
   }
   function sortTreeD(list, sk, dir) {
@@ -588,10 +639,53 @@
     });
     list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
   }
-  function dailyBanner(f) {
-    return '<div class="banner" style="margin-bottom:14px">💡 <div>Funil diário em <b>Meta + Google</b> — cada plataforma se adapta: onde o anúncio <b>já converteu</b>, a Ação decide pelo <b>ROAS projetado</b> (<b>Acelerar</b> ≥ 1,0 · <b>Manter</b> 0,7–1 · <b>Revisar</b> 0,4–0,7 · <b>Pausar</b> &lt; 0,4); onde <b>ainda não vendeu</b>, decide pelo <b>CPL</b> (barato ≤ 0,8× a mediana = Acelerar, caro ≥ 1,35× = Revisar). O CPL fica visível sempre e o ROAS aparece assim que a plataforma vende. Atualiza sozinho a cada 3h. <b>Meta com imposto ×1,1385; Google sem.</b></div></div>';
+  function dailyBanner() {
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>leadscore A/B/C</b> (protocolo do Playbook, holdout AUC 0,674): <b>A</b> = lead forte (score ≥ 7, converte ~2× a média → <b>escalar/seed</b>) · <b>B</b> = médio (1–6 → manter) · <b>C</b> = fraco (≤ 0 → <b>evitar/excluir</b>). A <b>Ação</b> por campanha/anúncio: <b>Acelerar</b> quando ≥ 25% de leads A ou qualidade ≥ 1,25× · <b>Evitar</b> quando ≥ 42% de C ou qualidade ≤ 0,78× · senão <b>Manter</b>. Indicador de acompanhamento = <b>% de leads A por conjunto</b>, não CPL. O ROAS fica na sub-aba própria. Atualiza sozinho a cada 3h.</div></div>';
   }
-  // ROAS TOTAL da captação diária (Meta+Google consolidado) — atribuição por e-mail + nome do comprador do FDI
+  function roasBanner() {
+    return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
+  }
+  // strip de leadscore A/B/C do diario (no lugar do Frio/Morno/Quente)
+  function abcStrip(a) {
+    var tot = (a.la + a.lb + a.lc) || 1;
+    var wa = a.la / tot * 100, wb = a.lb / tot * 100, wc = a.lc / tot * 100;
+    function seg(cls, w, n) { return '<span class="' + cls + '" style="width:' + w + '%">' + (w > 8 ? fInt(n) : '') + '</span>'; }
+    return '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:12px">Leadscore A / B / C — respostas rastreadas no período</div>' +
+      '<div class="score-strip"><div class="score-bar">' + seg('seg-a', wa, a.la) + seg('seg-b', wb, a.lb) + seg('seg-c', wc, a.lc) + '</div>' +
+      '<div class="score-legend">' +
+      liScore('var(--teal)', 'A · forte', 'score ≥ 7', a.la, tot) + liScore('var(--gold)', 'B · médio', '1 a 6', a.lb, tot) + liScore('var(--red)', 'C · evitar', '≤ 0', a.lc, tot) +
+      '</div></div></div>';
+  }
+  // ---- PERFIL DO LEAD (sub-aba do diario) ----
+  function perfilDiario(f, a) {
+    var P = D.pesquisa;
+    var tot = (a.la + a.lb + a.lc) || 1;
+    var cards = '<div class="kpi-row">' +
+      card3('🟢 Lead A · forte', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · score ≥ 7 · escalar/seed</span>') +
+      card3('🟡 Lead B · médio', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · score 1–6 · manter</span>') +
+      card3('🔴 Lead C · evitar', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · score ≤ 0 · excluir</span>') +
+      card3('📝 Respostas no período', fInt(a.respTotal), '<span>base do perfil (pesquisa_diario)</span>') +
+      '</div>';
+    var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · todas as respostas)</span><span class="st-line"></span></div>' +
+      '<div class="dims-grid">' + arr(P.dims).map(function (dm) { return dimCard(dm, 'diario'); }).join('') + '</div>';
+    return '<div class="section-title">Perfil do lead · Webinar Diário <span class="st-line"></span></div>' +
+      cards + abcRuler() + dims + validationPanel();
+  }
+  function abcRuler() {
+    function rr2(t, p) { var col = p >= 3 ? 'var(--teal)' : p >= 1 ? 'var(--gold)' : p < 0 ? 'var(--red)' : 'var(--muted)'; return '<tr><td style="color:var(--muted)">' + t + '</td><td class="pt" style="color:' + col + '">' + (p > 0 ? '+' + p : p) + '</td></tr>'; }
+    return '<details class="ruler" open><summary>Régua do leadscore A/B/C (Playbook · 6 perguntas com sinal)</summary>' +
+      '<table class="ruler-tbl"><thead><tr><th>Pergunta / resposta</th><th style="text-align:center">Pontos</th></tr></thead><tbody>' +
+      rgrp('Valor já investido') + rr2('Acima de R$ 100.000', 5) + rr2('R$ 50.000 a R$ 100.000', 4) + rr2('Até R$ 50.000', 3) + rr2('Ainda não investi', 0) +
+      rgrp('Aporte mensal') + rr2('R$ 500 a R$ 2.000', 4) + rr2('R$ 100 a R$ 500 · acima de R$ 2.000', 2) + rr2('Até R$ 100', 0) + rr2('Não consigo investir agora', -1) +
+      rgrp('Renda mensal') + rr2('Acima de R$ 10.000', 4) + rr2('R$ 5.000 a R$ 10.000', 2) + rr2('R$ 2.000 a R$ 5.000', 1) + rr2('Até R$ 2.000', 0) + rr2('Não possuo renda', -2) +
+      rgrp('Idade') + rr2('61 anos ou mais', 2) + rr2('51 a 60 anos', 1) + rr2('Até 50 anos', 0) +
+      rgrp('O que mais te trava') + rr2('Não saber onde investir · falta de tempo', 2) + rr2('Falta de confiança · tarde demais', 1) + rr2('Falta de dinheiro para começar', -1) + rr2('Medo de perder dinheiro', -2) +
+      rgrp('Resultado esperado') + rr2('Investir sem medo e com clareza', 2) + rr2('Montar meus primeiros investimentos', 1) + rr2('Por onde começar · renda · poupança', 0) +
+      '</tbody></table>' +
+      '<div style="padding:6px 14px 14px;color:var(--muted);font-size:12px">Nível de investidor e Motivação ficam de fora (redundantes). Faixas: <b style="color:var(--teal)">A ≥ 7</b> · <b style="color:var(--gold)">B 1–6</b> · <b style="color:var(--red)">C ≤ 0</b>.</div>' +
+      '</details>';
+  }
+  // ROAS TOTAL da captação diária (Meta+Google consolidado) — atribuição por e-mail (+ WhatsApp confirmando)
   function dailyRoasStrip(a) {
     var roas = a.roas, cls = roas == null ? 'bad' : (roas >= 1 ? 'good' : roas >= 0.5 ? 'ok' : 'bad');
     var conv = a.leads ? a.sales / a.leads : null;
@@ -610,24 +704,26 @@
     var set = TREE_STATE[skey] || (TREE_STATE[skey] = {});
     var open = !!set[path];
     var hasKids = n.children && n.children.length;
-    var tag = dailyTag(n);
+    var tag = dTag(n);
     var accelN = hasKids ? countTagD(n, 'acelerar') : 0;
     var cplc = cplColor(n.cpl, MED_CPL_D);
     var caret = hasKids ? '<span class="caret ' + (open ? 'open' : '') + '">▶</span>' : '<span class="caret" style="opacity:0">•</span>';
-    var roasCell = '';
-    if (DAILY_SALES) {
+    var cell5;
+    if (DMODE === 'abc') {
+      cell5 = abcCell(n);
+    } else {
       var r = dailyRoas(n);
-      roasCell = '<div class="tr-num tr-q">' + (r == null
+      cell5 = '<div class="tr-num tr-q">' + (r == null
         ? '<span class="qc muted" title="sem venda ainda">🕐</span>'
         : '<span class="qc" style="color:' + roasColor(r) + ';font-weight:700">' + fRoas(r) + '</span><div class="qsub">' + fInt(n.sales) + 'v · ' + fBRL0(n.rev) + '</div>') + '</div>';
     }
-    var ttl = 'Investido ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads · CPL ' + (n.cpl == null ? '—' : fBRL(n.cpl)) + (DAILY_SALES && n.sales ? ' · ' + fInt(n.sales) + ' vendas (ROAS ' + fRoas(dailyRoas(n)) + ')' : '');
+    var ttl = 'Investido ' + fBRL0(n.sp) + ' · ' + fInt(n.ld) + ' leads · CPL ' + (n.cpl == null ? '—' : fBRL(n.cpl)) + (abcScored(n) ? ' · leadscore A ' + fInt(n.la) + '/B ' + fInt(n.lb) + '/C ' + fInt(n.lc) : '') + (n.sales ? ' · ' + fInt(n.sales) + ' vendas (ROAS ' + fRoas(dailyRoas(n)) + ')' : '');
     var row = '<div class="tr-row lvl' + n.lvl + '" data-path="' + encodeURIComponent(path) + '" data-k="' + skey + '"' + (hasKids ? ' data-toggle="1"' : '') + ' title="' + ttl + '">' +
       '<div class="tr-name">' + caret + '<span class="nm" title="' + esc(n.name) + '">' + esc(pretty(n.name)) + '</span></div>' +
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
-      roasCell +
+      cell5 +
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
         (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' anúncio(s) pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
       '</div>' +
@@ -636,39 +732,49 @@
     if (hasKids && open) kids = n.children.map(function (c) { return treeRowsDaily(c, fk, plat, path); }).join('');
     return row + kids;
   }
-  function optColDaily(f, plat, lo, hi) {
+  function optColDaily(f, plat, lo, hi, mode) {
+    DMODE = mode;
     var isG = plat === 'g';
     var list = buildTree(f, plat, lo, hi);
     var withSp = list.filter(function (n) { return n.sp > 0; });
     var noSp = list.filter(function (n) { return n.sp <= 0; });
-    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0 });
-    DAILY_SALES = tot.sales > 0;   // modo ROAS por PLATAFORMA (Google pode ainda nao ter vendido)
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); o.la += (n.la || 0); o.lb += (n.lb || 0); o.lc += (n.lc || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0, la: 0, lb: 0, lc: 0 });
+    DAILY_SALES = tot.sales > 0;
     MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
     var cpl = tot.ld ? tot.sp / tot.ld : null;
-    var roas = (DAILY_SALES && tot.sp) ? tot.rev / tot.sp : null;
+    var roas = tot.sp ? tot.rev / tot.sp : null;
+    var sTot = tot.la + tot.lb + tot.lc;
     var sortKey = f.key + '_' + plat;
-    var so = SORT_STATE[sortKey] || { sk: 'cpl', dir: 1 };   // default: CPL crescente (mais barato primeiro)
+    var so = SORT_STATE[sortKey] || { sk: 'q', dir: -1 };   // default: melhor 5a metrica primeiro (qualidade A / ROAS)
     sortTreeD(withSp, so.sk, so.dir);
     var rows = withSp.map(function (c) { return treeRowsDaily(c, f.key, plat, ''); }).join('');
     if (noSp.length) {
-      var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rev: 0, sales: 0, cpl: null, children: [] };
-      noSp.forEach(function (n) { orph.ld += n.ld; });
+      var orph = { name: '— leads sem investimento rastreado —', lvl: 0, sp: 0, ld: 0, rev: 0, sales: 0, la: 0, lb: 0, lc: 0, cpl: null, children: [] };
+      noSp.forEach(function (n) { orph.ld += n.ld; orph.la += (n.la || 0); orph.lb += (n.lb || 0); orph.lc += (n.lc || 0); });
       if (orph.ld > 0) rows += treeRowsDaily(orph, f.key, plat, '');
     }
     if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
-    var d = DAILY_SALES;
-    var totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
-      (d ? ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales)) : '');
+    var totals, head5;
+    if (mode === 'abc') {
+      totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+        ot('🟢 Lead A', fInt(tot.la) + (sTot ? ' · ' + Math.round(tot.la / sTot * 100) + '%' : '')) +
+        ot('🟡 Lead B', fInt(tot.lb)) + ot('🔴 Lead C', fInt(tot.lc) + (sTot ? ' · ' + Math.round(tot.lc / sTot * 100) + '%' : ''));
+      head5 = sHead(sortKey, so, 'q', 'A / B / C', 'tr-num');
+    } else {
+      totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+        ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales));
+      head5 = sHead(sortKey, so, 'q', 'ROAS', 'tr-num');
+    }
     var head = sHead(sortKey, so, 'name', 'Campanha / ' + (isG ? 'grupo' : 'conjunto') + ' / anúncio', 'tr-name') +
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
       sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
-      (d ? sHead(sortKey, so, 'roas', 'ROAS', 'tr-num') : '') +
+      head5 +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num');
     return '<div class="opt-col ' + plat + '">' +
       '<div class="opt-head"><div class="oh-ic">' + (isG ? 'G' : 'M') + '</div><div><h3>' + (isG ? 'Google Ads' : 'Meta Ads') + '</h3><div class="oh-sub">campanha › ' + (isG ? 'grupo' : 'conjunto') + ' › anúncio · ' + (isG ? 'sem imposto' : 'imposto ×1,1385') + '</div></div></div>' +
       '<div class="opt-totals">' + totals + '</div>' +
-      '<div class="tree ' + (d ? 'd6' : 'd5') + '">' +
+      '<div class="tree dd">' +
       '<div class="tr-row head">' + head + '</div>' +
       rows + '</div></div>';
   }

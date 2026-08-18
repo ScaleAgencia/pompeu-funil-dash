@@ -220,6 +220,65 @@ function TierOf($score) {
   return 'f'
 }
 
+# ======= LEADSCORE A/B/C do DIARIO (Playbook, holdout AUC 0,674) =========
+#  6 perguntas com sinal (nivel e motivacao ficam de fora, redundantes).
+#  Faixas: A >= 7 (escalar/seed) · B 1..6 (manter) · C <= 0 (evitar).
+function AbcValor($a) {   # Valor total ja investido
+  $t = Deacc $a
+  if ($t -like '*acima*100.000*') { return 5 }
+  if ($t -like '*50.000*100.000*') { return 4 }
+  if ($t -like '*10.000*50.000*') { return 3 }
+  if ($t -like '*ate*10.000*' -or $t -like '*ate r 10*') { return 3 }
+  return 0                                     # ainda nao investi / vazio
+}
+function AbcAporte($a) {  # Quanto consegue investir por mes
+  $t = Deacc $a
+  if ($t -like '*nao consigo*') { return -1 }
+  if ($t -like '*100*500*') { return 2 }
+  if ($t -like '*500*1.000*') { return 4 }
+  if ($t -like '*1.000*2.000*') { return 4 }
+  if ($t -like '*acima*2.000*') { return 2 }
+  return 0                                     # ate R$100 / vazio
+}
+function AbcRenda($a) {   # Renda mensal
+  $t = Deacc $a
+  if ($t -like '*possuo*') { return -2 }        # nao possuo renda
+  if ($t -like '*acima*10.000*') { return 4 }
+  if ($t -like '*5.000*10.000*') { return 2 }
+  if ($t -like '*2.000*5.000*') { return 1 }
+  return 0                                     # ate R$2.000 / vazio
+}
+function AbcIdade($a) {   # Idade
+  $t = Deacc $a
+  if ($t -like '*61 anos*' -or $t -like '*61+*') { return 2 }
+  if ($t -like '*51 a 60*' -or $t -like '*50 anos ou mais*') { return 1 }
+  return 0
+}
+function AbcTrava($a) {   # O que mais te trava
+  $t = Deacc $a
+  if ($t -like '*medo de perder*') { return -2 }
+  if ($t -like '*falta de dinheiro*') { return -1 }
+  if ($t -like '*onde investir*') { return 2 }
+  if ($t -like '*falta de tempo*') { return 2 }
+  if ($t -like '*confianca*') { return 1 }
+  if ($t -like '*tarde demais*') { return 1 }
+  return 0
+}
+function AbcResult($a) {  # Resultado esperado da aula
+  $t = Deacc $a
+  if ($t -like '*sem medo*' -or $t -like '*com clareza*') { return 2 }
+  if ($t -like '*montar*primeiros*' -or $t -like '*primeiros investimentos*') { return 1 }
+  return 0
+}
+function ScoreABC($idade, $valor, $trava, $result, $renda, $cap) {
+  return (AbcValor $valor) + (AbcAporte $cap) + (AbcRenda $renda) + (AbcIdade $idade) + (AbcTrava $trava) + (AbcResult $result)
+}
+function BandOf($score) {
+  if ($score -ge 7) { return 'a' }
+  if ($score -ge 1) { return 'b' }
+  return 'c'                                    # score <= 0
+}
+
 # ---- attribution key cleaners ------------------------------------------
 function CleanUtm($s) {
   if ($null -eq $s) { return '' }
@@ -246,14 +305,14 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
   if ($grain.ContainsKey($k)) { return $grain[$k] }
   $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai;
          sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0;
-         ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 }
+         ld = 0; rs = 0; f = 0; m = 0; q = 0; la = 0; lb = 0; lc = 0; rev = 0.0; sales = 0 }
   $grain[$k] = $n; return $n
 }
 
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false) {
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
@@ -340,19 +399,20 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     }
     $gk = "$d|$p|$ci|$si|$ai"
     $n = $grain[$gk]
-    if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 }; $grain[$gk] = $n }
+    if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; la = 0; lb = 0; lc = 0; rev = 0.0; sales = 0 }; $grain[$gk] = $n }
     $n.ld += 1
     $totalLeads++
     $edLeads[$tag] = $edLeads[$tag] + 1
     $ek2 = "$tag|$d"; $edDay[$ek2] = $edDay[$ek2] + 1
     $ek = $em.Trim().ToLowerInvariant()
-    $lead = @{ d = $d; node = $n; resp = $false; em = $ek }   # guarda o email p/ o anti-xara do match por nome
-    $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
-    if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
     $pk = $r[2] -replace '\D', ''
     if ($pk.Length -ge 12 -and $pk.StartsWith('55')) { $pk = $pk.Substring(2) }
     if ($pk.Length -gt 11) { $pk = $pk.Substring($pk.Length - 11) }
-    if ($pk.Length -ge 8) { $pa = $phIndex[$pk]; if ($null -eq $pa) { $pa = New-Object System.Collections.ArrayList; $phIndex[$pk] = $pa }; [void]$pa.Add($lead) }
+    $phk = if ($pk.Length -ge 8) { $pk } else { '' }
+    $lead = @{ d = $d; node = $n; resp = $false; em = $ek; ph = $phk }   # em+ph p/ cruzamento estrito (email E telefone) do diario
+    $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
+    if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
+    if ($phk -ne '') { $pa = $phIndex[$phk]; if ($null -eq $pa) { $pa = New-Object System.Collections.ArrayList; $phIndex[$phk] = $pa }; [void]$pa.Add($lead) }
   }
   Write-Host ("   [{0:n1}s] leads(tagged) $key = $totalLeads" -f $T.Elapsed.TotalSeconds)
 
@@ -361,6 +421,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   $rows = Read-Rows $fPesq
   $respTot = 0; $respMatch = 0
   $tierTot = @{ f = 0; m = 0; q = 0 }
+  $abcTot = @{ a = 0; b = 0; c = 0 }   # leadscore A/B/C (so quando $abcScore, ex: diario)
   $survDay = @{}   # data DA RESPOSTA (col Data) -> @{tot;mat} : bate com a planilha por dia
   # per-dimension distributions (this funnel) : dimKey -> (answerLabel -> count)
   $dist = @{}
@@ -377,8 +438,10 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $idade = $r[3]; $nivel = $r[4]; $valor = $r[5]; $trava = $r[6]; $result = $r[7]; $renda = $r[8]; $cap = $r[9]; $motiv = $r[10]
     $score = ScoreOf $idade $nivel $valor $trava $result $renda $cap $motiv
     $tier = TierOf $score
+    $band = if ($abcScore) { BandOf (ScoreABC $idade $valor $trava $result $renda $cap) } else { '' }
     $respTot++
     $tierTot[$tier]++
+    if ($band -ne '') { $abcTot[$band]++ }
     BumpDist $dist 'idade' $idade.Trim(); BumpDist $dist 'renda' $renda.Trim(); BumpDist $dist 'motiv' $motiv.Trim(); BumpDist $dist 'trava' $trava.Trim()
     BumpDist $dist 'valor' $valor.Trim(); BumpDist $dist 'nivel' $nivel.Trim(); BumpDist $dist 'cap' $cap.Trim(); BumpDist $dist 'result' $result.Trim()
     if ($tier -eq 'q') {
@@ -400,8 +463,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       if ($null -eq $pick) { foreach ($c in $cands) { if ($null -eq $pick -or $c.d -lt $pick.d) { $pick = $c } } }
       if ($null -ne $pick) {
         $didMatch = $true
-        if (-not $pick.resp) { $pick.resp = $true; $pick.node.rs += 1; $pick.node[$tier] += 1; $respMatch++ }
-        else { $pick.node[$tier] += 1 }
+        $bf = if ($band -ne '') { 'l' + $band } else { '' }
+        if (-not $pick.resp) { $pick.resp = $true; $pick.node.rs += 1; $pick.node[$tier] += 1; if ($bf) { $pick.node[$bf] += 1 }; $respMatch++ }
+        else { $pick.node[$tier] += 1; if ($bf) { $pick.node[$bf] += 1 } }
       }
     }
     # tally por DATA DA RESPOSTA (bate com a planilha ao filtrar por dia)
@@ -416,7 +480,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   return @{
     key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex; nameIndex = $nmIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
-    tierTot = $tierTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay
+    tierTot = $tierTot; abcTot = $abcTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay
   }
 }
 
@@ -456,7 +520,7 @@ function Attribute-Sales($funnels) {
   Write-Host ("   cols: prod=$iProd nome=$iNome wpp=$iWpp email=$iMail data=$iData fat=$iFat src=$iSrc")
   $rows = Read-Rows $file
   $tot = 0; $totV = 0.0; $attr = 0; $attrV = 0.0
-  $mByEm = 0; $mByPh = 0; $mByNm = 0   # de onde veio cada atribuicao (email/telefone/nome)
+  $mByEm = 0; $mByPh = 0; $mByNm = 0; $mByDia = 0; $mDiaPh = 0   # atribuicao: diario(email, +telefone confirmado=mDiaPh) / seg-ter email / telefone
   $unSrc = @{}   # utm_source -> @{sales;rev} for UNATTRIBUTED sales
   $byYear = @{}  # year -> @{sales;rev} for ALL FDI sales
   $script:FDI_BUYERS = @{}   # email -> 1 : TODO comprador de FDI (p/ validacao do leadscore)
@@ -469,50 +533,46 @@ function Attribute-Sales($funnels) {
     $yr = $sd.Substring(0, 4)
     if (-not $byYear.ContainsKey($yr)) { $byYear[$yr] = @{ sales = 0; rev = 0.0 } }
     $byYear[$yr].sales += 1; $byYear[$yr].rev += $val
-    # best lead across all funnels with capture date <= sale date (closest). Prioridade: EMAIL > TELEFONE > NOME.
+    # best lead com captacao <= venda. DIARIO = ESTRITO (email E telefone no MESMO lead); Seg/Ter = email > telefone.
     $best = $null; $via = ''
     $ek = $r[$iMail].Trim().ToLowerInvariant()
+    $pk = if ($iWpp -ge 0 -and $r.Count -gt $iWpp) { PhKey $r[$iWpp] } else { '' }
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) { $script:FDI_BUYERS[$ek] = 1 }
-    # 1) EMAIL (todos os funis)
+    # 1) DIARIO — EMAIL e a chave; se a venda TIVER telefone e o lead tambem, precisam BATER (senao descarta o candidato).
+    #    Venda sem telefone (99% do FDI hoje) -> email basta. Assim o telefone vira double-check automatico.
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
-        $cands = $fn.emIndex[$ek]
-        if ($null -eq $cands) { continue }
+        if ($fn.key -ne 'diario') { continue }
+        $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
+        foreach ($c in $cands) {
+          if ($c.d -gt $sd) { continue }
+          if ($pk.Length -ge 8 -and $c.ph -ne '' -and $c.ph -ne $pk) { continue }   # ambos tem telefone e divergem -> veta
+          if ($null -eq $best -or $c.d -gt $best.d) { $best = $c }
+        }
+      }
+      if ($null -ne $best) { $via = 'dia'; if ($pk.Length -ge 8 -and $best.ph -eq $pk) { $mDiaPh++ } }
+    }
+    # 2) SEG/TER — email
+    if ($null -eq $best -and $ek -ne '' -and $ek.IndexOf('@') -ge 0) {
+      foreach ($fn in $funnels) {
+        if ($fn.key -eq 'diario') { continue }
+        $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
       if ($null -ne $best) { $via = 'em' }
     }
-    # 2) TELEFONE/WhatsApp (todos os funis) — sinal forte, agora que a planilha de vendas tem a coluna
-    if ($null -eq $best -and $iWpp -ge 0 -and $r.Count -gt $iWpp) {
-      $pk = PhKey $r[$iWpp]
-      if ($pk.Length -ge 8) {
-        foreach ($fn in $funnels) {
-          $cands = $fn.phIndex[$pk]
-          if ($null -eq $cands) { continue }
-          foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
-        }
-        if ($null -ne $best) { $via = 'ph' }
+    # 3) SEG/TER — telefone
+    if ($null -eq $best -and $pk.Length -ge 8) {
+      foreach ($fn in $funnels) {
+        if ($fn.key -eq 'diario') { continue }
+        $cands = $fn.phIndex[$pk]; if ($null -eq $cands) { continue }
+        foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
-    }
-    # 3) NOME completo (so DIARIO, anti-xara) — ultimo recurso qdo email e telefone nao bateram
-    if ($null -eq $best) {
-      $nk = NKey $r[$iNome]                             # exige nome+sobrenome (>=2 tokens) e casa o nome COMPLETO
-      if ($nk -ne '') {
-        foreach ($fn in $funnels) {
-          if ($fn.key -ne 'diario' -or $null -eq $fn.nameIndex) { continue }
-          $cands = $fn.nameIndex[$nk]
-          if ($null -eq $cands) { continue }
-          # ANTI-XARA: se o mesmo nome completo aparece com 2+ emails distintos (pessoas diferentes), NAO adivinha
-          $emails = @{}; foreach ($c in $cands) { $emails[$c.em] = 1 }
-          if ($emails.Count -gt 1) { continue }
-          foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
-        }
-        if ($null -ne $best) { $via = 'nm' }
-      }
+      if ($null -ne $best) { $via = 'ph' }
     }
     if ($null -ne $best) {
       $best.node.rev += $val; $best.node.sales += 1; $attr++; $attrV += $val
-      if ($via -eq 'em') { $mByEm++ } elseif ($via -eq 'ph') { $mByPh++ } elseif ($via -eq 'nm') { $mByNm++ }
+      if ($via -eq 'dia') { $mByDia++ } elseif ($via -eq 'em') { $mByEm++ } elseif ($via -eq 'ph') { $mByPh++ }
     } else {
       # UNATTRIBUTED (nao rastreada): tally by utm_source
       $src = if ($iSrc -ge 0 -and $r.Count -gt $iSrc) { $r[$iSrc].Trim().ToLowerInvariant() } else { '' }
@@ -521,7 +581,7 @@ function Attribute-Sales($funnels) {
       $unSrc[$src].sales += 1; $unSrc[$src].rev += $val
     }
   }
-  Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2} | via email={5} telefone={6} nome={7}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV, $mByEm, $mByPh, $mByNm)
+  Write-Host ("   [{0:n1}s] FDI sales={1} R$ {2:n2} | attribuidas={3} R$ {4:n2} | diario={5} (telefone-confirmado={6}) seg/ter-email={7} seg/ter-tel={8}" -f $Ts.Elapsed.TotalSeconds, $tot, $totV, $attr, $attrV, $mByDia, $mDiaPh, $mByEm, $mByPh)
   $unArr = New-Object System.Collections.ArrayList
   foreach ($k in $unSrc.Keys) { [void]$unArr.Add(@{ src = $k; sales = $unSrc[$k].sales; rev = [Math]::Round($unSrc[$k].rev, 2) }) }
   $unArr = @($unArr | Sort-Object { - $_.rev })
@@ -536,10 +596,10 @@ function Finalize-Funnel($fn, $dow) {
   $dayMap = @{}
   foreach ($n in $grain.Values) {
     $k = "$($n.d)|$($n.p)"
-    if (-not $dayMap.ContainsKey($k)) { $dayMap[$k] = @{ date = $n.d; p = $n.p; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; rev = 0.0; sales = 0 } }
+    if (-not $dayMap.ContainsKey($k)) { $dayMap[$k] = @{ date = $n.d; p = $n.p; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; la = 0; lb = 0; lc = 0; rev = 0.0; sales = 0 } }
     $x = $dayMap[$k]
     $x.sp += $n.sp; $x.im += $n.im; $x.ck += $n.ck; $x.lp += $n.lp; $x.rc += $n.rc; $x.px += $n.px
-    $x.ld += $n.ld; $x.rs += $n.rs; $x.f += $n.f; $x.m += $n.m; $x.q += $n.q; $x.rev += $n.rev; $x.sales += $n.sales
+    $x.ld += $n.ld; $x.rs += $n.rs; $x.f += $n.f; $x.m += $n.m; $x.q += $n.q; $x.la += $n.la; $x.lb += $n.lb; $x.lc += $n.lc; $x.rev += $n.rev; $x.sales += $n.sales
   }
   $daily = @($dayMap.Values | Sort-Object { $_.date }, { $_.p })
 
@@ -548,7 +608,7 @@ function Finalize-Funnel($fn, $dow) {
     if ($n.sp -eq 0 -and $n.ld -eq 0 -and $n.rs -eq 0 -and $n.sales -eq 0) { continue }
     [void]$grArr.Add(@{ d = $n.d; p = $n.p; c = $n.c; s = $n.s; a = $n.a;
       sp = [Math]::Round($n.sp, 2); im = [int]$n.im; ck = [int]$n.ck; lp = [int]$n.lp; rc = [int]$n.rc; px = [int]$n.px;
-      ld = $n.ld; rs = $n.rs; f = $n.f; m = $n.m; q = $n.q; rev = [Math]::Round($n.rev, 2); sales = $n.sales })
+      ld = $n.ld; rs = $n.rs; f = $n.f; m = $n.m; q = $n.q; la = $n.la; lb = $n.lb; lc = $n.lc; rev = [Math]::Round($n.rev, 2); sales = $n.sales })
   }
 
   $ds = @($daily | Where-Object { $_.ld -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
@@ -591,7 +651,7 @@ function Finalize-Funnel($fn, $dow) {
   return @{
     key = $fn.key; leadMin = $lmin; leadMax = $lmax
     totalLeads = $fn.totalLeads; leadsEra = $leadsEra
-    respTot = $fn.respTot; respMatch = $fn.respMatch; tierTot = $fn.tierTot
+    respTot = $fn.respTot; respMatch = $fn.respMatch; tierTot = $fn.tierTot; abcTot = $fn.abcTot
     totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
     editions = @($eds); survDaily = @($svArr)
     daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
@@ -602,7 +662,7 @@ function Finalize-Funnel($fn, $dow) {
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
 # DIARIO: Meta + Google (mesma planilha QID_DIARIO), tag exata WBN-2026-DIARIO; Meta com Ad<->AdSet trocados + utm URL-encoded (+->espaco); Google col padrao + utm plano
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
@@ -678,7 +738,7 @@ function FunnelPayload($f) {
     key = $f.key; leadMin = $f.leadMin; leadMax = $f.leadMax
     totalLeads = $f.totalLeads; leadsEra = $f.leadsEra
     respTot = $f.respTot; respMatch = $f.respMatch
-    tierTot = $f.tierTot
+    tierTot = $f.tierTot; abcTot = $f.abcTot
     totalRev = $f.totalRev; totalSales = $f.totalSales
     editions = @($f.editions); survDaily = @($f.survDaily)
     daily = @($f.daily); grain = @($f.grain)
