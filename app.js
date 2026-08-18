@@ -573,29 +573,33 @@
      1a venda cai (f.totalSales>0) inclui o ROAS projetado, mantendo o CPL.
   ===================================================================== */
   var MED_CPL_D = null;      // mediana do CPL do funil diario (p/ colorir + tags)
+  var MED_CPLA = null;       // mediana do Custo por Lead A (diario, modo abc) — base das cores/tags
   var DAILY_SALES = false;   // o funil diario ja tem venda atribuida?
   var DMODE = 'abc';         // modo da coluna de otimizacao do diario: 'abc' (leadscore) | 'roas'
-  // Lifts de conversao por faixa (Playbook, holdout): A ~2,0x · B ~0,95x · C ~0,43x da media.
-  var ABC_LIFT = { a: 2.0, b: 0.95, c: 0.43 };
   function abcScored(n) { return (n.la || 0) + (n.lb || 0) + (n.lc || 0); }
-  function abcQuality(n) { var s = abcScored(n); return s ? ((n.la * ABC_LIFT.a + n.lb * ABC_LIFT.b + n.lc * ABC_LIFT.c) / s) : null; }
-  function abcTag(n) {
-    if (n.sp <= 0 && n.ld <= 0) return null;
+  // CUSTO POR LEAD A = gasto / (leads A estimados sobre TODOS os leads). Projeta a fracao de A
+  // dos respondentes sobre o total de leads -> neutro a taxa de resposta, comparavel entre campanhas.
+  function cplA(n) {
     var s = abcScored(n);
-    if (s < 8) return { c: 'matur', t: '🕐 Poucas resp.' };   // amostra pequena p/ julgar o mix
-    var pa = n.la / s, pc = n.lc / s, q = abcQuality(n);
-    if (pa >= 0.25 || q >= 1.25) return { c: 'acelerar', t: 'Acelerar' };   // rico em A -> escalar/seed
-    if (pc >= 0.42 || q <= 0.78) return { c: 'pausar', t: 'Evitar' };       // rico em C -> excluir/evitar
+    if (!s || !n.la) return null;
+    var estA = n.ld * (n.la / s);
+    return estA > 0 ? n.sp / estA : null;
+  }
+  // Acao do diario = minimizar o Custo por Lead A: barato -> escalar/seed; caro -> evitar.
+  function abcTag(n) {
+    if (n.sp <= 0) return null;
+    if (abcScored(n) < 8 || n.la < 2) return { c: 'matur', t: '🕐 Poucas resp.' };
+    var ca = cplA(n);
+    if (ca == null || !MED_CPLA) return { c: 'manter', t: 'Manter' };
+    if (ca <= 0.8 * MED_CPLA) return { c: 'acelerar', t: 'Acelerar' };
+    if (ca >= 1.35 * MED_CPLA) return { c: 'pausar', t: 'Evitar' };
     return { c: 'manter', t: 'Manter' };
   }
-  function abcQColor(q) { if (q == null) return 'var(--muted)'; if (q >= 1.2) return 'var(--teal)'; if (q >= 0.9) return 'var(--gold)'; return 'var(--red)'; }
   function abcCell(n) {
-    var s = abcScored(n);
-    if (!s) return '<div class="tr-num"><span class="qc muted" title="sem resposta de pesquisa">🕐</span></div>';
-    var pa = n.la / s * 100, pb = n.lb / s * 100, pc = n.lc / s * 100, q = abcQuality(n);
-    return '<div class="tr-num abc-c" title="A ' + fInt(n.la) + ' · B ' + fInt(n.lb) + ' · C ' + fInt(n.lc) + ' (qualidade ' + (q).toFixed(2).replace('.', ',') + '×)">' +
-      '<div class="abc-bar"><i class="a" style="width:' + pa + '%"></i><i class="b" style="width:' + pb + '%"></i><i class="c" style="width:' + pc + '%"></i></div>' +
-      '<div class="abc-pa" style="color:' + abcQColor(q) + '">A ' + Math.round(pa) + '%</div></div>';
+    var ca = cplA(n);
+    var ttl = 'A ' + fInt(n.la) + ' · B ' + fInt(n.lb) + ' · C ' + fInt(n.lc) + ' respostas · custo por lead A';
+    if (ca == null) return '<div class="tr-num" title="' + ttl + '"><span class="qc muted">—</span></div>';
+    return '<div class="tr-num" title="' + ttl + '"><span class="cpl-pill" style="color:' + cplColor(ca, MED_CPLA) + '">' + fBRL(ca) + '</span></div>';
   }
   function dailyRoas(n) { return (n.sp > 0 && (n.sales > 0 || n.rev > 0)) ? (n.rev / n.sp) : null; }
   function dailyTag(n) {
@@ -625,7 +629,7 @@
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
     if (sk === 'cpl') return n.cpl;
-    if (sk === 'q') return DMODE === 'abc' ? abcQuality(n) : dailyRoas(n);   // 5a coluna: qualidade A/B/C ou ROAS
+    if (sk === 'q') return DMODE === 'abc' ? cplA(n) : dailyRoas(n);   // 5a coluna: custo por lead A ou ROAS
     if (sk === 'acao') { var t = dTag(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
   }
@@ -640,7 +644,7 @@
     list.forEach(function (n) { if (n.children && n.children.length) sortTreeD(n.children, sk, dir); });
   }
   function dailyBanner() {
-    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>leadscore A/B/C</b> (protocolo do Playbook, holdout AUC 0,674): <b>A</b> = lead forte (score ≥ 7, converte ~2× a média → <b>escalar/seed</b>) · <b>B</b> = médio (1–6 → manter) · <b>C</b> = fraco (≤ 0 → <b>evitar/excluir</b>). A <b>Ação</b> por campanha/anúncio: <b>Acelerar</b> quando ≥ 25% de leads A ou qualidade ≥ 1,25× · <b>Evitar</b> quando ≥ 42% de C ou qualidade ≤ 0,78× · senão <b>Manter</b>. Indicador de acompanhamento = <b>% de leads A por conjunto</b>, não CPL. O ROAS fica na sub-aba própria. Atualiza sozinho a cada 3h.</div></div>';
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Otimize pelo <b>Custo por Lead A</b> — quanto você paga por um lead <b>faixa A</b> (score ≥ 7 no leadscore do Playbook, converte ~2× a média). É o gasto ÷ leads A estimados (fração de A dos respondentes projetada sobre todos os leads, neutra à taxa de resposta). <b>Ação:</b> <b>Acelerar</b> quando o Custo/Lead A é barato (≤ 0,8× a mediana do funil) · <b>Evitar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Ordena do A mais barato pro mais caro. O leadscore A/B/C completo fica na aba <b>Perfil do Lead</b>; o ROAS na aba <b>ROAS Projetado</b>. Atualiza a cada 3h.</div></div>';
   }
   function roasBanner() {
     return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
@@ -741,11 +745,13 @@
     var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); o.la += (n.la || 0); o.lb += (n.lb || 0); o.lc += (n.lc || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0, la: 0, lb: 0, lc: 0 });
     DAILY_SALES = tot.sales > 0;
     MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
+    MED_CPLA = median(withSp.filter(function (n) { return cplA(n) != null && n.la >= 2; }).map(function (n) { return cplA(n); }));
     var cpl = tot.ld ? tot.sp / tot.ld : null;
     var roas = tot.sp ? tot.rev / tot.sp : null;
     var sTot = tot.la + tot.lb + tot.lc;
+    var cplATot = (sTot && tot.la) ? tot.sp / (tot.ld * (tot.la / sTot)) : null;   // custo por lead A do total
     var sortKey = f.key + '_' + plat;
-    var so = SORT_STATE[sortKey] || { sk: 'q', dir: -1 };   // default: melhor 5a metrica primeiro (qualidade A / ROAS)
+    var so = SORT_STATE[sortKey] || { sk: 'q', dir: (mode === 'abc' ? 1 : -1) };   // abc: CPL-A crescente (A mais barato); roas: maior ROAS
     sortTreeD(withSp, so.sk, so.dir);
     var rows = withSp.map(function (c) { return treeRowsDaily(c, f.key, plat, ''); }).join('');
     if (noSp.length) {
@@ -757,9 +763,10 @@
     var totals, head5;
     if (mode === 'abc') {
       totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
+        ot('🎯 Custo/Lead A', money(cplATot)) +
         ot('🟢 Lead A', fInt(tot.la) + (sTot ? ' · ' + Math.round(tot.la / sTot * 100) + '%' : '')) +
-        ot('🟡 Lead B', fInt(tot.lb)) + ot('🔴 Lead C', fInt(tot.lc) + (sTot ? ' · ' + Math.round(tot.lc / sTot * 100) + '%' : ''));
-      head5 = sHead(sortKey, so, 'q', 'A / B / C', 'tr-num');
+        ot('🔴 Lead C', fInt(tot.lc) + (sTot ? ' · ' + Math.round(tot.lc / sTot * 100) + '%' : ''));
+      head5 = sHead(sortKey, so, 'q', 'CPL A', 'tr-num');
     } else {
       totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
         ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales));
