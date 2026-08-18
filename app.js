@@ -36,9 +36,10 @@
       else { o.oLd += r.ld; o.oRev += r.rev || 0; o.oSl += r.sales || 0; }
       o.resp += r.rs; o.f += r.f; o.m += r.m; o.q += r.q; o.la += (r.la || 0); o.lb += (r.lb || 0); o.lc += (r.lc || 0);
       if (r.date >= SS) { o.qSp += r.sp; o.qLd += r.ld; }  // survey-era scope for qualification metrics
-      var d = o.days[r.date] || (o.days[r.date] = { date: r.date, gLd: 0, mLd: 0, sp: 0, ld: 0, rev: 0 });
+      var d = o.days[r.date] || (o.days[r.date] = { date: r.date, gLd: 0, mLd: 0, sp: 0, ld: 0, rev: 0, la: 0, lb: 0, lc: 0 });
       if (r.p === 'g') d.gLd += r.ld; else if (r.p === 'm') d.mLd += r.ld;
       d.sp += r.sp; d.ld += r.ld; d.rev += r.rev || 0;
+      d.la += r.la || 0; d.lb += r.lb || 0; d.lc += r.lc || 0;
     });
     o.spend = o.gSp + o.mSp;
     o.leads = o.gLd + o.mLd + o.oLd;
@@ -327,6 +328,7 @@
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
         (sub === 'consol' ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
+      if (sub === 'perfil') qualityDaily($('#ch-qual-' + key), a.dayArr);
       wireTrees(key);
       return;
     }
@@ -687,13 +689,38 @@
       card3('🔴 Lead C · excluir', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · bate uma regra de exclusão · cortar</span>') +
       card3('📝 Respostas no período', fInt(a.respTotal), '<span>base do perfil (pesquisa_diario)</span>') +
       '</div>';
-    var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · todas as respostas)</span><span class="st-line"></span></div>' +
+    var qual = '<div class="section-title" style="margin-top:6px">📈 Qualidade da captação por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· share A/B/C dos respondentes</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>Composição A / B / C por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>A seed</span><span><i style="background:var(--gold)"></i>B miolo</span><span><i style="background:var(--red)"></i>C excluir</span></div></div><div id="ch-qual-' + f.key + '"></div><div class="chart-foot">Cada barra = 100% das respostas do dia. Quanto maior a faixa verde (A) no topo, melhor a qualidade da entrada.</div></div>';
+    var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · índice de conversão por resposta, ao vivo)</span><span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:14px">📊 <div>O <b>índice de conversão</b> ao lado de cada resposta é o sinal real: <b style="color:var(--teal)">verde ≥ 1</b> converte acima da média, <b style="color:var(--red)">vermelho &lt; 1</b> abaixo. Recalculado a cada venda pelo cruzamento pesquisa × compradores. <b>Não confundir com peso de score</b> — a otimização usa as regras A/B/C, não soma de pontos. Ex.: aporte "até R$ 100" e "acima de R$ 2.000" aparecem com índice &lt; 1 (ruins) e <b>não contam pra Lead A</b>.</div></div>' +
       '<div class="dims-grid">' + arr(P.dims).map(function (dm) { return dimCard(dm, 'diario'); }).join('') + '</div>';
     return '<div class="section-title">Perfil do lead · Webinar Diário <span class="st-line"></span></div>' +
-      cards + aderenciaPanel() + abcRuler() + dims;
+      cards + aderenciaPanel(a) + qual + abcRuler() + dims;
   }
-  // ADERENCIA: cruza o nosso Lead A com quem REALMENTE compra o FDI (auto a cada venda).
-  function aderenciaPanel() {
+  // ---- PIZZAS (donut) — comparação leads × comprador, estilo SIP ----
+  function rampColor(t) {
+    var s = [[242, 99, 126], [245, 176, 65], [52, 211, 153]], a, b, f;
+    if (t <= 0.5) { a = s[0]; b = s[1]; f = t * 2; } else { a = s[1]; b = s[2]; f = (t - 0.5) * 2; }
+    return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * f) + ',' + Math.round(a[1] + (b[1] - a[1]) * f) + ',' + Math.round(a[2] + (b[2] - a[2]) * f) + ')';
+  }
+  function optColors(n) { var c = []; for (var i = 0; i < n; i++) c.push(rampColor(n > 1 ? i / (n - 1) : 0.5)); return c; }
+  function adColor(v) { return v >= 75 ? 'var(--teal)' : (v >= 58 ? 'var(--gold)' : 'var(--red)'); }
+  function pieSvg(pcts, colors, size, labels) {
+    var cx = size / 2, cy = size / 2, rO = size / 2 - 2, rI = rO * 0.58, tot = 0; pcts.forEach(function (v) { tot += (v || 0); });
+    var s = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">';
+    if (tot <= 0) return s + '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((rO + rI) / 2).toFixed(1) + '" fill="none" stroke="var(--panel3)" stroke-width="' + (rO - rI).toFixed(1) + '"/></svg>';
+    var ang = -Math.PI / 2;
+    pcts.forEach(function (v, i) {
+      if (!v || v <= 0) return; var frac = v / tot, a1 = ang + frac * 2 * Math.PI, ti = '<title>' + esc(labels[i]) + ' ' + (frac * 100).toFixed(1) + '%</title>';
+      if (frac >= 0.999) { s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((rO + rI) / 2).toFixed(1) + '" fill="none" stroke="' + colors[i] + '" stroke-width="' + (rO - rI).toFixed(1) + '">' + ti + '</circle>'; ang = a1; return; }
+      var large = (a1 - ang) > Math.PI ? 1 : 0, x0 = (cx + rO * Math.cos(ang)).toFixed(1), y0 = (cy + rO * Math.sin(ang)).toFixed(1), x1 = (cx + rO * Math.cos(a1)).toFixed(1), y1 = (cy + rO * Math.sin(a1)).toFixed(1),
+        xi1 = (cx + rI * Math.cos(a1)).toFixed(1), yi1 = (cy + rI * Math.sin(a1)).toFixed(1), xi0 = (cx + rI * Math.cos(ang)).toFixed(1), yi0 = (cy + rI * Math.sin(ang)).toFixed(1);
+      s += '<path d="M' + x0 + ' ' + y0 + ' A' + rO + ' ' + rO + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 + ' L' + xi1 + ' ' + yi1 + ' A' + rI + ' ' + rI + ' 0 ' + large + ' 0 ' + xi0 + ' ' + yi0 + ' Z" fill="' + colors[i] + '">' + ti + '</path>'; ang = a1;
+    });
+    return s + '</svg>';
+  }
+  // ADERENCIA: cruza o mix de leads do diario com quem REALMENTE compra o FDI (auto a cada venda).
+  function aderenciaPanel(a) {
     var v = D.validation;
     if (!v || !v.abc) return '';
     var A = v.abc.a, B = v.abc.b, C = v.abc.c;
@@ -703,30 +730,66 @@
       var conv = x.n ? x.b / x.n : 0, lift = avg ? conv / avg : 0;
       return '<div class="card kpi"><div class="klabel">' + nm + '</div><div class="kval" style="color:' + color + '">' + fPct(conv, 2) + '</div><div class="ksub"><span>' + fInt(x.b) + '/' + fInt(x.n) + ' compraram · lift ' + (lift ? lift.toFixed(2).replace('.', ',') + '×' : '—') + '</span></div></div>';
     }
-    var aProf = {}; arr(v.aProfile).forEach(function (p) { aProf[p.key] = p; });
-    var nMatch = 0, nDim = 0;
-    var rows = arr(v.profile).map(function (bp) {
-      var ap = aProf[bp.key] || {};
-      if (!bp.top || !ap.top) return '';
-      nDim++; var match = (ap.top === bp.top); if (match) nMatch++;
-      var aPct = ap.tot ? Math.round(ap.n / ap.tot * 100) : 0, bPct = bp.tot ? Math.round(bp.n / bp.tot * 100) : 0;
-      var ct = function (p) { return ' <span style="color:var(--muted2);font-size:11px">' + p + '%</span>'; };
-      return '<tr><td class="lbl">' + esc(bp.label) + '</td>' +
-        '<td class="lbl">' + esc(ap.top) + ct(aPct) + '</td>' +
-        '<td class="lbl">' + esc(bp.top) + ct(bPct) + '</td>' +
-        '<td style="text-align:center">' + (match ? '<span style="color:var(--teal);font-weight:700">✓ bate</span>' : '<span style="color:var(--gold)">✕ difere</span>') + '</td></tr>';
-    }).join('');
-    var ader = nDim ? Math.round(nMatch / nDim * 100) : 0;
-    var acolor = ader >= 70 ? 'var(--teal)' : ader >= 45 ? 'var(--gold)' : 'var(--red)';
-    return '<div class="section-title" style="margin-top:6px">✅ Aderência do Lead A ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o perfil dominante do <b>nosso Lead A</b> com o de <b>quem realmente compra</b>, dimensão a dimensão — quanto mais "bate", mais o nosso A está mirando o comprador certo.</div></div>' +
+    // pizzas por pergunta: mix dos leads do diario (agora) x mix de quem comprou
+    var overlaps = [], pies = '';
+    arr(D.pesquisa.dims).forEach(function (dm) {
+      var bd = (v.buyerDist && v.buyerDist[dm.key]) || {};
+      var os = arr(dm.options).map(function (o) { return { label: o.label, lead: o.dia || 0, buy: bd[o.label] || 0 }; })
+        .filter(function (o) { return o.lead > 0 || o.buy > 0; }).sort(function (x, y) { return y.lead - x.lead; });
+      if (!os.length) return;
+      var sumL = os.reduce(function (s, o) { return s + o.lead; }, 0) || 1, sumB = os.reduce(function (s, o) { return s + o.buy; }, 0) || 1;
+      var leadPct = os.map(function (o) { return o.lead / sumL * 100; }), buyPct = os.map(function (o) { return o.buy / sumB * 100; });
+      var cols = optColors(os.length), labels = os.map(function (o) { return o.label; });
+      var ov = 0; for (var i = 0; i < os.length; i++) ov += Math.min(leadPct[i], buyPct[i]);
+      overlaps.push(ov);
+      var leg = os.map(function (o, i) { return '<span class="pc-lg"><i style="background:' + cols[i] + '"></i>' + esc(o.label) + '</span>'; }).join('');
+      pies += '<div class="pcmp"><div class="pcmp-h">' + esc(dm.label) + ' <span class="pcmp-ad" style="color:' + adColor(ov) + '">' + Math.round(ov) + '% igual</span></div>' +
+        '<div class="pcmp-body"><figure>' + pieSvg(leadPct, cols, 118, labels) + '<figcaption>Leads diário</figcaption></figure>' +
+        '<figure>' + pieSvg(buyPct, cols, 118, labels) + '<figcaption class="buyer">Comprador FDI</figcaption></figure></div>' +
+        '<div class="pcmp-leg">' + leg + '</div></div>';
+    });
+    var macro = overlaps.length ? overlaps.reduce(function (s, x) { return s + x; }, 0) / overlaps.length : 0;
+    var verd = macro >= 82 ? 'Muito perto do perfil comprador' : (macro >= 70 ? 'Perto do perfil comprador' : (macro >= 58 ? 'Aderência média — dá pra melhorar' : 'Longe do perfil — mix precisa mudar'));
+    var sTot = (a.la + a.lb + a.lc) || 1, aNow = a.la / sTot * 100, aBuy = totB ? A.b / totB * 100 : 0;
+    var macroBlock = '<div class="macro"><div class="macro-gauge">' + pieSvg([macro, 100 - macro], [adColor(macro), 'var(--panel3)'], 154, ['aderência', '']) +
+      '<div class="mg-c"><span class="mg-v" style="color:' + adColor(macro) + '">' + Math.round(macro) + '%</span><span class="mg-l">aderência</span></div></div>' +
+      '<div class="macro-txt"><div class="macro-big" style="color:' + adColor(macro) + '">' + verd + '</div>' +
+      '<div class="macro-sub">O quanto o mix de leads do diário se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
+      '<div class="macro-a"><div class="ma-lab">% de <b class="cA">Lead A</b> (o perfil que mais compra)</div>' +
+        '<div class="ma-row"><span>Leads diário</span><div class="ma-tr"><i style="width:' + Math.min(100, aNow).toFixed(1) + '%"></i></div><b>' + aNow.toFixed(1).replace('.', ',') + '%</b></div>' +
+        '<div class="ma-row"><span>Comprador FDI</span><div class="ma-tr"><i class="buy" style="width:' + Math.min(100, aBuy).toFixed(1) + '%"></i></div><b>' + aBuy.toFixed(1).replace('.', ',') + '%</b></div>' +
+      '</div></div></div>';
+    return '<div class="section-title" style="margin-top:6px">✅ Aderência ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o <b>mix dos leads do diário</b> com o de <b>quem realmente compra</b>, pergunta a pergunta.</div></div>' +
       '<div class="kpi-row">' +
         convCard('🟢 Lead A converte', A, 'var(--teal)') +
         convCard('🟡 Lead B converte', B, 'var(--gold)') +
         convCard('🔴 Lead C converte', C, 'var(--red)') +
-        '<div class="card kpi"><div class="klabel">🎯 Aderência A × comprador</div><div class="kval" style="color:' + acolor + '">' + ader + '%</div><div class="ksub"><span>' + nMatch + ' de ' + nDim + ' dimensões batem</span></div></div>' +
       '</div>' +
-      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Dimensão</th><th style="text-align:left">Nosso Lead A (+ comum)</th><th style="text-align:left">Comprador FDI (+ comum)</th><th style="text-align:center">Aderência</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      macroBlock +
+      '<div class="prof-pies">' + pies + '</div>';
+  }
+  // GRAFICO DIARIO DE QUALIDADE: composição A/B/C por dia (share), mostra se a qualidade sobe/desce
+  function qualityDaily(host, days) {
+    if (!host) return;
+    var ds = days.filter(function (d) { return (d.la + d.lb + d.lc) > 0; });
+    if (!ds.length) { host.innerHTML = '<div class="empty">Sem respostas de pesquisa no período.</div>'; return; }
+    var W = 900, H = 210, pad = { l: 32, r: 10, t: 10, b: 22 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var bw = iw / ds.length, bar = Math.max(2, Math.min(bw * 0.72, 32));
+    var s = svgEl(W, H);
+    for (var i = 0; i <= 4; i++) { var gy = pad.t + ih * i / 4; s += line(pad.l, gy, W - pad.r, gy, 'var(--line)'); s += txt(pad.l - 5, gy + 3, (100 - i * 25) + '%', 'end', 9, 'var(--muted2)'); }
+    ds.forEach(function (d, k) {
+      var tot = d.la + d.lb + d.lc, cx = pad.l + bw * k + (bw - bar) / 2;
+      var hc = d.lc / tot * ih, hb = d.lb / tot * ih, ha = d.la / tot * ih;
+      var yC = pad.t + ih - hc, yB = yC - hb, yA = yB - ha;
+      s += '<rect x="' + cx + '" y="' + yC + '" width="' + bar + '" height="' + hc + '" fill="var(--red)" opacity=".82" rx="1"><title>' + dfull(d.date) + ' — C ' + Math.round(d.lc / tot * 100) + '%</title></rect>';
+      s += '<rect x="' + cx + '" y="' + yB + '" width="' + bar + '" height="' + hb + '" fill="var(--gold)" opacity=".82" rx="1"><title>' + dfull(d.date) + ' — B ' + Math.round(d.lb / tot * 100) + '%</title></rect>';
+      s += '<rect x="' + cx + '" y="' + yA + '" width="' + bar + '" height="' + ha + '" fill="var(--teal)" rx="1"><title>' + dfull(d.date) + ' — A ' + Math.round(d.la / tot * 100) + '% (' + fInt(d.la) + ' de ' + fInt(tot) + ')</title></rect>';
+    });
+    labelSparse(ds, pad, bw, ih, function (t) { s += t; });
+    s += '</svg>';
+    host.innerHTML = s;
   }
   function abcRuler() {
     function rl(cls, cond) { return '<div class="rl ' + cls + '"><code>' + cond + '</code></div>'; }
@@ -1034,6 +1097,18 @@
   }
   function labelOf(w) { return w === 'segunda' ? 'Segunda-feira' : (w === 'terca' ? 'Terça-feira' : (w === 'diario' ? 'Webinar diário' : 'Soma dos funis')); }
 
+  // indice de conversao (AO VIVO): (compra/lead da resposta) / conversao media. >1 = converte acima da media.
+  function convIx(dk, label) {
+    var C = D.validation && D.validation.conv && D.validation.conv[dk];
+    if (!C) return null;
+    var o = C[label]; if (o && o.idx != null) return o.idx;
+    return null;
+  }
+  function ixBadge(ix) {
+    if (ix == null) return '<span class="ix-badge ix-na" title="poucos dados p/ medir">–</span>';
+    var cls = ix >= 1.15 ? 'ix-hi' : (ix >= 0.85 ? 'ix-mid' : 'ix-lo');
+    return '<span class="ix-badge ' + cls + '" title="converte ' + ix.toFixed(2).replace('.', ',') + '× a média (índice de conversão)">' + ix.toFixed(2).replace('.', ',') + '×</span>';
+  }
   function dimCard(dm, w) {
     var opts = arr(dm.options).map(function (o) { var dv = o.dia || 0; var v = w === 'segunda' ? o.seg : (w === 'terca' ? o.ter : (w === 'diario' ? dv : o.seg + o.ter + dv)); return { label: o.label, pts: o.pts, v: v }; });
     opts = opts.filter(function (o) { return o.v > 0; }).sort(function (a, b) { return b.v - a.v; });
@@ -1041,11 +1116,11 @@
     var max = opts.length ? opts[0].v : 1;
     var rows = opts.map(function (o) {
       var w2 = o.v / max * 100;
-      return '<div class="ob-row"><div class="ob-lab"><span class="pts-badge pts-' + o.pts + '" title="' + o.pts + ' ponto(s)">' + o.pts + '</span><span title="' + esc(o.label) + '">' + esc(o.label) + '</span></div>' +
+      return '<div class="ob-row"><div class="ob-lab">' + ixBadge(convIx(dm.key, o.label)) + '<span title="' + esc(o.label) + '">' + esc(o.label) + '</span></div>' +
         '<div class="ob-track"><div class="ob-fill" style="width:' + w2 + '%"></div></div>' +
         '<div class="ob-val">' + fInt(o.v) + '<div style="font-size:10px;color:var(--muted2)">' + fPct(o.v / tot, 0) + '</div></div></div>';
     }).join('');
-    return '<div class="dim-card"><div class="dim-head"><div class="dh-t">' + esc(dm.label) + '</div><div class="dh-w">peso máx. ' + dm.peso + '</div></div><div class="opt-bar">' + rows + '</div></div>';
+    return '<div class="dim-card"><div class="dim-head"><div class="dh-t">' + esc(dm.label) + '</div><div class="dh-w" title="índice de conversão: >1 converte acima da média, <1 abaixo">índice conv.</div></div><div class="opt-bar">' + rows + '</div></div>';
   }
 
   function ruler() {

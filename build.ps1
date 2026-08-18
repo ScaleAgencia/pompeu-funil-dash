@@ -739,14 +739,38 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
   $bt = @{ q = @{ n = 0; b = 0 }; m = @{ n = 0; b = 0 }; f = @{ n = 0; b = 0 } }
   $abc = @{ a = @{ n = 0; b = 0 }; b = @{ n = 0; b = 0 }; c = @{ n = 0; b = 0 } }   # A/B/C x compra (aderencia)
   $prof = @{}; $aprof = @{}   # perfil do COMPRADOR e perfil do LEAD A
-  foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $prof[$dk] = @{}; $aprof[$dk] = @{} }
+  $conv = @{}                 # dimKey -> resposta -> {n=leads, b=compradores}  (indice de conversao AO VIVO)
+  $DK8 = @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')
+  foreach ($dk in $DK8) { $prof[$dk] = @{}; $aprof[$dk] = @{}; $conv[$dk] = @{} }
   foreach ($e in $leads.Keys) {
     $x = $leads[$e]; $t = TierOf $x.sc; $bought = $buyers.ContainsKey($e)
     $band = ClassABC $x.idade $x.nivel $x.valor $x.trava $x.renda $x.cap
     $bt[$t].n++; if ($bought) { $bt[$t].b++ }
     $abc[$band].n++; if ($bought) { $abc[$band].b++ }
-    if ($bought) { foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }; if (-not $prof[$dk].ContainsKey($a)) { $prof[$dk][$a] = 0 }; $prof[$dk][$a]++ } }
-    if ($band -eq 'a') { foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }; if (-not $aprof[$dk].ContainsKey($a)) { $aprof[$dk][$a] = 0 }; $aprof[$dk][$a]++ } }
+    foreach ($dk in $DK8) {
+      $a = $x[$dk]; if ($a -eq '') { $a = '(sem resposta)' }
+      if (-not $conv[$dk].ContainsKey($a)) { $conv[$dk][$a] = @{ n = 0; b = 0 } }
+      $conv[$dk][$a].n++
+      if ($bought) {
+        $conv[$dk][$a].b++
+        if (-not $prof[$dk].ContainsKey($a)) { $prof[$dk][$a] = 0 }; $prof[$dk][$a]++
+      }
+      if ($band -eq 'a') { if (-not $aprof[$dk].ContainsKey($a)) { $aprof[$dk][$a] = 0 }; $aprof[$dk][$a]++ }
+    }
+  }
+  # ---- indice de conversao por resposta = (compra/lead da resposta) / conversao media ----
+  $totN = $bt.q.n + $bt.m.n + $bt.f.n; $totB = $bt.q.b + $bt.m.b + $bt.f.b
+  $avgConv = if ($totN -gt 0) { $totB / $totN } else { 0 }
+  $convArr = @{}
+  foreach ($dk in $DK8) {
+    $mm = @{}
+    foreach ($a in $conv[$dk].Keys) {
+      $c = $conv[$dk][$a]
+      $cv = if ($c.n -gt 0) { $c.b / $c.n } else { 0 }
+      $ix = if ($avgConv -gt 0 -and $c.n -ge 25) { [Math]::Round($cv / $avgConv, 2) } else { $null }
+      $mm[$a] = @{ n = $c.n; b = $c.b; idx = $ix }
+    }
+    $convArr[$dk] = $mm
   }
   function TopProf($h, $dims) {
     $arr = New-Object System.Collections.ArrayList
@@ -759,7 +783,10 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
   }
   $profArr = TopProf $prof $DIMS
   $aProfArr = TopProf $aprof $DIMS
-  return @{ matCut = $matCut; leads = $leads.Count; buyers = ($bt.q.b + $bt.m.b + $bt.f.b); tier = $bt; abc = $abc; profile = @($profArr); aProfile = @($aProfArr) }
+  # ---- distribuicao COMPLETA do comprador por dimensao (pras pizzas) ----
+  $buyerDist = @{}
+  foreach ($dm in $DIMS) { $dk = $dm.key; $o = @{}; foreach ($a in $prof[$dk].Keys) { $o[$a] = $prof[$dk][$a] }; $buyerDist[$dk] = $o }
+  return @{ matCut = $matCut; leads = $leads.Count; buyers = ($bt.q.b + $bt.m.b + $bt.f.b); tier = $bt; abc = $abc; profile = @($profArr); aProfile = @($aProfArr); conv = $convArr; avgConv = [Math]::Round($avgConv, 5); buyerDist = $buyerDist }
 }
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
 $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
