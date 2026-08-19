@@ -316,7 +316,7 @@
           '<div class="section-title">ROAS projetado por campanha e anúncio <span class="st-line"></span></div>' + roasBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       } else if (sub === 'perfil') {
-        dview = perfilDiario(f, a);
+        dview = perfilDiario(f, st.lo, st.hi);
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
       } else {
@@ -326,9 +326,9 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'perfil' ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
-      if (sub === 'perfil') qualityDaily($('#ch-qual-' + key), a.dayArr);
+      if (sub === 'perfil') { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
       wireTrees(key);
       return;
     }
@@ -679,23 +679,28 @@
       liScore('var(--teal)', 'A · seed', 'perseguir', a.la, tot) + liScore('var(--gold)', 'B · miolo', 'manter', a.lb, tot) + liScore('var(--red)', 'C · excluir', 'cortar', a.lc, tot) +
       '</div></div></div>';
   }
-  // ---- PERFIL DO LEAD (sub-aba do diario) ----
-  function perfilDiario(f, a) {
-    var P = D.pesquisa;
-    var tot = (a.la + a.lb + a.lc) || 1;
+  // ---- PERFIL DO LEAD (sub-aba do diario) — filtravel por UTM ----
+  function perfilDiario(f, lo, hi) {
+    var R = arr(f.resp), RO = f.respOpts || {};
+    var Rp = R.filter(function (r) { return r[0] >= lo && r[0] <= hi; });   // recorte por período
+    var rows = Rp.filter(utmMatch);                                        // + filtro UTM
+    var g = respAgg(rows); PERFIL_G = g;
+    var tot = g.tot || 1;
+    var dimLabel = {}; arr(D.pesquisa.dims).forEach(function (dm) { dimLabel[dm.key] = dm.label; });
+    var active = PF.src >= 0 || PF.med >= 0 || PF.camp >= 0 || PF.set >= 0 || PF.ad >= 0;
     var cards = '<div class="kpi-row">' +
-      card3('🟢 Lead A · seed', fInt(a.la), '<span>' + fPct(a.la / tot) + ' · 51+ E capacidade (aporte R$500–2k ou renda ≥5k) · perseguir</span>') +
-      card3('🟡 Lead B · miolo', fInt(a.lb), '<span>' + fPct(a.lb / tot) + ' · nem A nem C · manter</span>') +
-      card3('🔴 Lead C · excluir', fInt(a.lc), '<span>' + fPct(a.lc / tot) + ' · bate uma regra de exclusão · cortar</span>') +
-      card3('📝 Respostas no período', fInt(a.respTotal), '<span>base do perfil (pesquisa_diario)</span>') +
+      card3('🟢 Lead A · seed', fInt(g.la), '<span>' + fPct(g.la / tot) + ' · 51+ E capacidade (aporte R$500–2k ou renda ≥5k) · perseguir</span>') +
+      card3('🟡 Lead B · miolo', fInt(g.lb), '<span>' + fPct(g.lb / tot) + ' · nem A nem C · manter</span>') +
+      card3('🔴 Lead C · excluir', fInt(g.lc), '<span>' + fPct(g.lc / tot) + ' · bate uma regra de exclusão · cortar</span>') +
+      card3('📝 Respostas', fInt(tot), '<span>' + (active ? 'no filtro/período' : 'no período') + '</span>') +
       '</div>';
-    var qual = '<div class="section-title" style="margin-top:6px">📈 Qualidade da captação por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· share A/B/C dos respondentes</span><span class="st-line"></span></div>' +
-      '<div class="chart-card"><div class="chart-head"><h4>Composição A / B / C por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>A seed</span><span><i style="background:var(--gold)"></i>B miolo</span><span><i style="background:var(--red)"></i>C excluir</span></div></div><div id="ch-qual-' + f.key + '"></div><div class="chart-foot">Cada barra = 100% das respostas do dia. Quanto maior a faixa verde (A) no topo, melhor a qualidade da entrada.</div></div>';
-    var dims = '<div class="section-title">O que os leads do diário respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(pesquisa_diario · índice de conversão por resposta, ao vivo)</span><span class="st-line"></span></div>' +
+    var qual = '<div class="section-title" style="margin-top:2px">📈 Qualidade da captação por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· share A/B/C dos respondentes (passe o mouse)</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>Composição A / B / C por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>A seed</span><span><i style="background:var(--gold)"></i>B miolo</span><span><i style="background:var(--red)"></i>C excluir</span></div></div><div id="ch-qual-' + f.key + '"></div><div class="chart-foot">Cada barra = 100% das respostas do dia; o % verde no topo é a fatia de Lead A. Passe o mouse para ver a % e a contagem de cada faixa.</div></div>';
+    var dims = '<div class="section-title">O que os leads respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(barra colorida por A/B/C · índice de conversão por resposta, ao vivo)</span><span class="st-line"></span></div>' +
       '<div class="banner" style="margin-bottom:14px">📊 <div>O <b>índice de conversão</b> ao lado de cada resposta é o sinal real: <b style="color:var(--teal)">verde ≥ 1</b> converte acima da média, <b style="color:var(--red)">vermelho &lt; 1</b> abaixo. Recalculado a cada venda pelo cruzamento pesquisa × compradores. <b>Não confundir com peso de score</b> — a otimização usa as regras A/B/C, não soma de pontos. Ex.: aporte "até R$ 100" e "acima de R$ 2.000" aparecem com índice &lt; 1 (ruins) e <b>não contam pra Lead A</b>.</div></div>' +
-      '<div class="dims-grid">' + arr(P.dims).map(function (dm) { return dimCard(dm, 'diario'); }).join('') + '</div>';
+      '<div class="dims-grid">' + PDK.map(function (dk) { return dimCardR(dk, dimLabel[dk] || dk, g.pdist[dk] || {}, RO[dk] || []); }).join('') + '</div>';
     return '<div class="section-title">Perfil do lead · Webinar Diário <span class="st-line"></span></div>' +
-      cards + aderenciaPanel(a) + qual + abcRuler() + dims;
+      utmFilterBar(Rp) + qual + cards + aderenciaPanel(g, RO) + abcRuler() + dims;
   }
   // ---- PIZZAS (donut) — comparação leads × comprador, estilo SIP ----
   function rampColor(t) {
@@ -719,8 +724,8 @@
     });
     return s + '</svg>';
   }
-  // ADERENCIA: cruza o mix de leads do diario com quem REALMENTE compra o FDI (auto a cada venda).
-  function aderenciaPanel(a) {
+  // ADERENCIA: cruza o mix de leads do diario (filtrado por UTM) com quem REALMENTE compra o FDI.
+  function aderenciaPanel(g, RO) {
     var v = D.validation;
     if (!v || !v.abc) return '';
     var A = v.abc.a, B = v.abc.b, C = v.abc.c;
@@ -730,11 +735,15 @@
       var conv = x.n ? x.b / x.n : 0, lift = avg ? conv / avg : 0;
       return '<div class="card kpi"><div class="klabel">' + nm + '</div><div class="kval" style="color:' + color + '">' + fPct(conv, 2) + '</div><div class="ksub"><span>' + fInt(x.b) + '/' + fInt(x.n) + ' compraram · lift ' + (lift ? lift.toFixed(2).replace('.', ',') + '×' : '—') + '</span></div></div>';
     }
-    // pizzas por pergunta: mix dos leads do diario (agora) x mix de quem comprou
+    var dimLabel = {}; arr(D.pesquisa.dims).forEach(function (dm) { dimLabel[dm.key] = dm.label; });
+    // pizzas por pergunta: mix dos leads (filtrados) x mix de quem comprou
     var overlaps = [], pies = '';
-    arr(D.pesquisa.dims).forEach(function (dm) {
-      var bd = (v.buyerDist && v.buyerDist[dm.key]) || {};
-      var os = arr(dm.options).map(function (o) { return { label: o.label, lead: o.dia || 0, buy: bd[o.label] || 0 }; })
+    PDK.forEach(function (dk) {
+      var bd = (v.buyerDist && v.buyerDist[dk]) || {}, pd = g.pdist[dk] || {}, ro = RO[dk] || [];
+      var leadByLab = {};
+      for (var code in pd) { if (pd.hasOwnProperty(code)) { var lb = ro[code]; if (lb == null) continue; leadByLab[lb] = (leadByLab[lb] || 0) + pd[code].t; } }
+      var labs = {}; Object.keys(leadByLab).forEach(function (l) { labs[l] = 1; }); Object.keys(bd).forEach(function (l) { labs[l] = 1; });
+      var os = Object.keys(labs).map(function (l) { return { label: l, lead: leadByLab[l] || 0, buy: bd[l] || 0 }; })
         .filter(function (o) { return o.lead > 0 || o.buy > 0; }).sort(function (x, y) { return y.lead - x.lead; });
       if (!os.length) return;
       var sumL = os.reduce(function (s, o) { return s + o.lead; }, 0) || 1, sumB = os.reduce(function (s, o) { return s + o.buy; }, 0) || 1;
@@ -743,20 +752,20 @@
       var ov = 0; for (var i = 0; i < os.length; i++) ov += Math.min(leadPct[i], buyPct[i]);
       overlaps.push(ov);
       var leg = os.map(function (o, i) { return '<span class="pc-lg"><i style="background:' + cols[i] + '"></i>' + esc(o.label) + '</span>'; }).join('');
-      pies += '<div class="pcmp"><div class="pcmp-h">' + esc(dm.label) + ' <span class="pcmp-ad" style="color:' + adColor(ov) + '">' + Math.round(ov) + '% igual</span></div>' +
-        '<div class="pcmp-body"><figure>' + pieSvg(leadPct, cols, 118, labels) + '<figcaption>Leads diário</figcaption></figure>' +
+      pies += '<div class="pcmp"><div class="pcmp-h">' + esc(dimLabel[dk] || dk) + ' <span class="pcmp-ad" style="color:' + adColor(ov) + '">' + Math.round(ov) + '% igual</span></div>' +
+        '<div class="pcmp-body"><figure>' + pieSvg(leadPct, cols, 118, labels) + '<figcaption>Leads (filtro)</figcaption></figure>' +
         '<figure>' + pieSvg(buyPct, cols, 118, labels) + '<figcaption class="buyer">Comprador FDI</figcaption></figure></div>' +
         '<div class="pcmp-leg">' + leg + '</div></div>';
     });
     var macro = overlaps.length ? overlaps.reduce(function (s, x) { return s + x; }, 0) / overlaps.length : 0;
     var verd = macro >= 82 ? 'Muito perto do perfil comprador' : (macro >= 70 ? 'Perto do perfil comprador' : (macro >= 58 ? 'Aderência média — dá pra melhorar' : 'Longe do perfil — mix precisa mudar'));
-    var sTot = (a.la + a.lb + a.lc) || 1, aNow = a.la / sTot * 100, aBuy = totB ? A.b / totB * 100 : 0;
+    var sTot = g.tot || 1, aNow = g.la / sTot * 100, aBuy = totB ? A.b / totB * 100 : 0;
     var macroBlock = '<div class="macro"><div class="macro-gauge">' + pieSvg([macro, 100 - macro], [adColor(macro), 'var(--panel3)'], 154, ['aderência', '']) +
       '<div class="mg-c"><span class="mg-v" style="color:' + adColor(macro) + '">' + Math.round(macro) + '%</span><span class="mg-l">aderência</span></div></div>' +
       '<div class="macro-txt"><div class="macro-big" style="color:' + adColor(macro) + '">' + verd + '</div>' +
       '<div class="macro-sub">O quanto o mix de leads do diário se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
       '<div class="macro-a"><div class="ma-lab">% de <b class="cA">Lead A</b> (o perfil que mais compra)</div>' +
-        '<div class="ma-row"><span>Leads diário</span><div class="ma-tr"><i style="width:' + Math.min(100, aNow).toFixed(1) + '%"></i></div><b>' + aNow.toFixed(1).replace('.', ',') + '%</b></div>' +
+        '<div class="ma-row"><span>Leads (filtro)</span><div class="ma-tr"><i style="width:' + Math.min(100, aNow).toFixed(1) + '%"></i></div><b>' + aNow.toFixed(1).replace('.', ',') + '%</b></div>' +
         '<div class="ma-row"><span>Comprador FDI</span><div class="ma-tr"><i class="buy" style="width:' + Math.min(100, aBuy).toFixed(1) + '%"></i></div><b>' + aBuy.toFixed(1).replace('.', ',') + '%</b></div>' +
       '</div></div></div>';
     return '<div class="section-title" style="margin-top:6px">✅ Aderência ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
@@ -769,27 +778,107 @@
       macroBlock +
       '<div class="prof-pies">' + pies + '</div>';
   }
-  // GRAFICO DIARIO DE QUALIDADE: composição A/B/C por dia (share), mostra se a qualidade sobe/desce
+  // GRAFICO DIARIO DE QUALIDADE: composição A/B/C por dia (share); hover mostra % + contagem de cada faixa
   function qualityDaily(host, days) {
     if (!host) return;
     var ds = days.filter(function (d) { return (d.la + d.lb + d.lc) > 0; });
-    if (!ds.length) { host.innerHTML = '<div class="empty">Sem respostas de pesquisa no período.</div>'; return; }
-    var W = 900, H = 210, pad = { l: 32, r: 10, t: 10, b: 22 };
+    if (!ds.length) { host.innerHTML = '<div class="empty">Sem respostas de pesquisa no período/filtro.</div>'; return; }
+    var W = 900, H = 220, pad = { l: 32, r: 10, t: 12, b: 24 };
     var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
-    var bw = iw / ds.length, bar = Math.max(2, Math.min(bw * 0.72, 32));
+    var bw = iw / ds.length, bar = Math.max(2, Math.min(bw * 0.72, 34));
     var s = svgEl(W, H);
     for (var i = 0; i <= 4; i++) { var gy = pad.t + ih * i / 4; s += line(pad.l, gy, W - pad.r, gy, 'var(--line)'); s += txt(pad.l - 5, gy + 3, (100 - i * 25) + '%', 'end', 9, 'var(--muted2)'); }
     ds.forEach(function (d, k) {
       var tot = d.la + d.lb + d.lc, cx = pad.l + bw * k + (bw - bar) / 2;
       var hc = d.lc / tot * ih, hb = d.lb / tot * ih, ha = d.la / tot * ih;
       var yC = pad.t + ih - hc, yB = yC - hb, yA = yB - ha;
-      s += '<rect x="' + cx + '" y="' + yC + '" width="' + bar + '" height="' + hc + '" fill="var(--red)" opacity=".82" rx="1"><title>' + dfull(d.date) + ' — C ' + Math.round(d.lc / tot * 100) + '%</title></rect>';
-      s += '<rect x="' + cx + '" y="' + yB + '" width="' + bar + '" height="' + hb + '" fill="var(--gold)" opacity=".82" rx="1"><title>' + dfull(d.date) + ' — B ' + Math.round(d.lb / tot * 100) + '%</title></rect>';
-      s += '<rect x="' + cx + '" y="' + yA + '" width="' + bar + '" height="' + ha + '" fill="var(--teal)" rx="1"><title>' + dfull(d.date) + ' — A ' + Math.round(d.la / tot * 100) + '% (' + fInt(d.la) + ' de ' + fInt(tot) + ')</title></rect>';
+      s += '<rect x="' + cx + '" y="' + yC + '" width="' + bar + '" height="' + hc + '" fill="var(--red)" opacity=".82" rx="1"></rect>';
+      s += '<rect x="' + cx + '" y="' + yB + '" width="' + bar + '" height="' + hb + '" fill="var(--gold)" opacity=".82" rx="1"></rect>';
+      s += '<rect x="' + cx + '" y="' + yA + '" width="' + bar + '" height="' + ha + '" fill="var(--teal)" rx="1"></rect>';
+      if (bar >= 13) s += txt(cx + bar / 2, yA - 3, Math.round(d.la / tot * 100) + '%', 'middle', 9.5, 'var(--teal)');
     });
     labelSparse(ds, pad, bw, ih, function (t) { s += t; });
     s += '</svg>';
     host.innerHTML = s;
+    var svg = host.querySelector('svg'); if (!svg) return;
+    ds.forEach(function (d, k) {
+      var tot = d.la + d.lb + d.lc;
+      var r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', pad.l + bw * k); r.setAttribute('y', pad.t); r.setAttribute('width', bw); r.setAttribute('height', ih);
+      r.setAttribute('fill', 'transparent'); r.style.cursor = 'crosshair';
+      r.addEventListener('mousemove', function (e) {
+        showTip('<div class="tt-t">' + dfull(d.date) + ' · ' + fInt(tot) + ' respostas</div>' +
+          '<div class="tt-r"><span style="color:var(--teal)">🟢 A · seed</span><b>' + Math.round(d.la / tot * 100) + '% · ' + fInt(d.la) + '</b></div>' +
+          '<div class="tt-r"><span style="color:var(--gold)">🟡 B · miolo</span><b>' + Math.round(d.lb / tot * 100) + '% · ' + fInt(d.lb) + '</b></div>' +
+          '<div class="tt-r"><span style="color:var(--red)">🔴 C · excluir</span><b>' + Math.round(d.lc / tot * 100) + '% · ' + fInt(d.lc) + '</b></div>', e);
+      });
+      r.addEventListener('mouseleave', hideTip);
+      svg.appendChild(r);
+    });
+  }
+  /* ===== FILTRO POR UTM (fonte/mídia/campanha/conjunto/ad) — respostas cruas do diário ===== */
+  var PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 };   // -1 = todas
+  var PERFIL_G = null;                                        // g filtrado, p/ desenhar o gráfico após innerHTML
+  function utmMatch(r) {
+    return (PF.src < 0 || r[2] === PF.src) && (PF.med < 0 || r[3] === PF.med) &&
+      (PF.camp < 0 || r[4] === PF.camp) && (PF.set < 0 || r[5] === PF.set) && (PF.ad < 0 || r[6] === PF.ad);
+  }
+  var PDK = ['idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result'];
+  function respAgg(rows) {
+    var la = 0, lb = 0, lc = 0, byDay = {}, pdist = {};
+    PDK.forEach(function (dk) { pdist[dk] = {}; });
+    rows.forEach(function (r) {
+      var b = r[1]; if (b === 0) la++; else if (b === 2) lc++; else lb++;
+      var day = byDay[r[0]] || (byDay[r[0]] = { date: r[0], la: 0, lb: 0, lc: 0 });
+      if (b === 0) day.la++; else if (b === 2) day.lc++; else day.lb++;
+      for (var i = 0; i < 8; i++) { var m = pdist[PDK[i]], code = r[7 + i], o = m[code] || (m[code] = { a: 0, b: 0, c: 0, t: 0 }); if (b === 0) o.a++; else if (b === 2) o.c++; else o.b++; o.t++; }
+    });
+    return { la: la, lb: lb, lc: lc, tot: la + lb + lc, dayArr: Object.keys(byDay).sort().map(function (k) { return byDay[k]; }), pdist: pdist };
+  }
+  function distinctFor(rows, col, labels) {
+    var seen = {}; rows.forEach(function (r) { var v = r[col]; if (v >= 0) seen[v] = (seen[v] || 0) + 1; });
+    return Object.keys(seen).map(function (k) { return { i: +k, label: labels[+k] || '(?)', n: seen[k] }; }).sort(function (a, b) { return b.n - a.n; });
+  }
+  function pfSelect(id, label, col, labels, cur, rows) {
+    var items = distinctFor(rows, col, labels);
+    if (!items.length) return '';
+    var o = '<option value="-1">todas</option>';
+    items.forEach(function (it) { o += '<option value="' + it.i + '"' + (cur == it.i ? ' selected' : '') + '>' + esc(it.label) + ' (' + it.n + ')</option>'; });
+    return '<span class="pf-sel-w"><span class="pf-sel-l">' + label + '</span><select class="pf-sel" id="' + id + '">' + o + '</select></span>';
+  }
+  function utmFilterBar(Rp) {
+    var active = PF.src >= 0 || PF.med >= 0 || PF.camp >= 0 || PF.set >= 0 || PF.ad >= 0;
+    var clr = active ? '<button class="pf-clr" id="pfClr">limpar filtros ✕</button>' : '';
+    return '<div class="utm-bar"><span class="pf-h">🔎 Filtrar por UTM</span>' +
+      pfSelect('pfSrc', 'Fonte', 2, NM.src || [], PF.src, Rp) +
+      pfSelect('pfMed', 'Mídia', 3, NM.med || [], PF.med, Rp) +
+      pfSelect('pfCamp', 'Campanha', 4, NM.c || [], PF.camp, Rp) +
+      pfSelect('pfSet', 'Conjunto', 5, NM.s || [], PF.set, Rp) +
+      pfSelect('pfAd', 'Ad', 6, NM.a || [], PF.ad, Rp) +
+      clr + '</div>';
+  }
+  function wirePerfilFilters() {
+    function bind(id, key) { var e = $('#' + id); if (e) e.onchange = function () { PF[key] = +this.value; renderFunnel('diario'); }; }
+    bind('pfSrc', 'src'); bind('pfMed', 'med'); bind('pfCamp', 'camp'); bind('pfSet', 'set'); bind('pfAd', 'ad');
+    var c = $('#pfClr'); if (c) c.onclick = function () { PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 }; renderFunnel('diario'); };
+  }
+  // dim card orientado por distribuição filtrada (barra empilhada A/B/C + índice de conversão)
+  function dimCardR(dk, label, pd, ro) {
+    var rowsArr = [];
+    for (var code in pd) { if (pd.hasOwnProperty(code)) { var o = pd[code]; rowsArr.push({ label: ro[code] || '(?)', a: o.a, b: o.b, c: o.c, t: o.t }); } }
+    rowsArr = rowsArr.filter(function (o) { return o.t > 0; }).sort(function (x, y) { return y.t - x.t; });
+    var tot = rowsArr.reduce(function (s, o) { return s + o.t; }, 0) || 1;
+    var max = rowsArr.length ? rowsArr[0].t : 1;
+    var body = rowsArr.map(function (o) {
+      return '<div class="ob-row"><div class="ob-lab">' + ixBadge(convIx(dk, o.label)) + '<span title="' + esc(o.label) + '">' + esc(o.label) + '</span></div>' +
+        '<div class="abc-track" title="A ' + o.a + ' · B ' + o.b + ' · C ' + o.c + '">' +
+          (o.a ? '<i style="width:' + (o.a / max * 100).toFixed(1) + '%;background:var(--teal)"></i>' : '') +
+          (o.b ? '<i style="width:' + (o.b / max * 100).toFixed(1) + '%;background:var(--gold)"></i>' : '') +
+          (o.c ? '<i style="width:' + (o.c / max * 100).toFixed(1) + '%;background:var(--red)"></i>' : '') +
+        '</div>' +
+        '<div class="ob-val">' + fInt(o.t) + '<div style="font-size:10px;color:var(--muted2)">' + fPct(o.t / tot, 0) + '</div></div></div>';
+    }).join('');
+    return '<div class="dim-card"><div class="dim-head"><div class="dh-t">' + esc(label) + '</div><div class="dh-w" title="índice de conversão: >1 acima da média, <1 abaixo">índice conv.</div></div><div class="opt-bar">' + body + '</div></div>';
   }
   function abcRuler() {
     function rl(cls, cond) { return '<div class="rl ' + cls + '"><code>' + cond + '</code></div>'; }

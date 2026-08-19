@@ -264,10 +264,18 @@ function CleanUtm($s) {
 $CampArr = New-Object System.Collections.ArrayList; $CampMap = @{}
 $SetArr  = New-Object System.Collections.ArrayList; $SetMap  = @{}
 $AdArr   = New-Object System.Collections.ArrayList; $AdMap   = @{}
+$SrcArr  = New-Object System.Collections.ArrayList; $SrcMap  = @{}   # utm_source (fonte: facebook/google/tiktok/youtube/organico)
+$MedArr  = New-Object System.Collections.ArrayList; $MedMap  = @{}   # utm_medium (midia)
 function Intern($arr, $map, $val) {
   if ($val -eq '') { $val = '(sem)' }
   if ($map.ContainsKey($val)) { return $map[$val] }
   $i = $arr.Add($val); $map[$val] = $i; return $i
+}
+# codigo estavel de resposta por dimensao (p/ respostas cruas filtraveis por UTM)
+function OptCode($optArr, $optMap, $dk, $lab) {
+  if ($lab -eq '') { $lab = '(sem resposta)' }
+  if ($optMap[$dk].ContainsKey($lab)) { return $optMap[$dk][$lab] }
+  $i = $optArr[$dk].Add($lab); $optMap[$dk][$lab] = $i; return $i
 }
 
 # ---- grain store: key -> node ------------------------------------------
@@ -382,7 +390,9 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($pk.Length -ge 12 -and $pk.StartsWith('55')) { $pk = $pk.Substring(2) }
     if ($pk.Length -gt 11) { $pk = $pk.Substring($pk.Length - 11) }
     $phk = if ($pk.Length -ge 8) { $pk } else { '' }
-    $lead = @{ d = $d; node = $n; resp = $false; em = $ek; ph = $phk }   # em+ph p/ cruzamento estrito (email E telefone) do diario
+    $srcIx = Intern $SrcArr $SrcMap ($r[4].Trim())                        # utm_source (fonte)
+    $medIx = if ($r.Count -gt 5) { Intern $MedArr $MedMap ($r[5].Trim()) } else { Intern $MedArr $MedMap '' }
+    $lead = @{ d = $d; node = $n; resp = $false; em = $ek; ph = $phk; src = $srcIx; med = $medIx }   # em+ph p/ cruzamento estrito; src+med p/ filtro UTM
     $ea = $emIndex[$ek]; if ($null -eq $ea) { $ea = New-Object System.Collections.ArrayList; $emIndex[$ek] = $ea }; [void]$ea.Add($lead)
     if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
     if ($phk -ne '') { $pa = $phIndex[$phk]; if ($null -eq $pa) { $pa = New-Object System.Collections.ArrayList; $phIndex[$phk] = $pa }; [void]$pa.Add($lead) }
@@ -402,6 +412,11 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   # profile of Quente leads (this funnel) : dimKey -> (answerLabel -> count)
   $prof = @{}
   foreach ($dk in @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')) { $prof[$dk] = @{} }
+  # respostas cruas p/ FILTRO POR UTM (so quando $abcScore, ex: diario): 1 linha por resposta
+  $DK8p = @('idade', 'renda', 'motiv', 'trava', 'valor', 'nivel', 'cap', 'result')
+  $respRows = New-Object System.Collections.ArrayList
+  $optArr = @{}; $optMap = @{}
+  foreach ($dk in $DK8p) { $optArr[$dk] = New-Object System.Collections.ArrayList; $optMap[$dk] = @{} }
 
   function BumpDist($h, $k, $lab) { if ($lab -eq '') { $lab = '(sem resposta)' }; if (-not $h[$k].ContainsKey($lab)) { $h[$k][$lab] = 0 }; $h[$k][$lab]++ }
 
@@ -428,8 +443,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($ek -ne '' -and $emIndex.ContainsKey($ek)) { $cands = $emIndex[$ek] }
     if ($null -eq $cands) { $pk = PhKey $r[2]; if ($pk.Length -ge 8 -and $phIndex.ContainsKey($pk)) { $cands = $phIndex[$pk] } }
     $didMatch = $false
+    $pick = $null
     if ($null -ne $cands -and $cands.Count -gt 0) {
-      $pick = $null
       foreach ($c in $cands) {
         if ($sd -eq '' -or $c.d -le $sd) { if ($null -eq $pick -or $c.d -gt $pick.d) { $pick = $c } }
       }
@@ -441,6 +456,21 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
         else { $pick.node[$tier] += 1; if ($bf) { $pick.node[$bf] += 1 } }
       }
     }
+    # ---- linha crua p/ FILTRO POR UTM (so diario/abcScore, so respostas casadas c/ lead) ----
+    if ($abcScore -and $band -ne '' -and $null -ne $pick) {
+      $bc = switch ($band) { 'a' { 0 } 'b' { 1 } 'c' { 2 } default { 1 } }
+      [void]$respRows.Add(@(
+        $pick.node.d, $bc, $pick.src, $pick.med, $pick.node.c, $pick.node.s, $pick.node.a,
+        (OptCode $optArr $optMap 'idade'  $idade.Trim()),
+        (OptCode $optArr $optMap 'renda'  $renda.Trim()),
+        (OptCode $optArr $optMap 'motiv'  $motiv.Trim()),
+        (OptCode $optArr $optMap 'trava'  $trava.Trim()),
+        (OptCode $optArr $optMap 'valor'  $valor.Trim()),
+        (OptCode $optArr $optMap 'nivel'  $nivel.Trim()),
+        (OptCode $optArr $optMap 'cap'    $cap.Trim()),
+        (OptCode $optArr $optMap 'result' $result.Trim())
+      ))
+    }
     # tally por DATA DA RESPOSTA (bate com a planilha ao filtrar por dia)
     if ($sd -ne '') {
       $sv = $survDay[$sd]; if ($null -eq $sv) { $sv = @{ tot = 0; mat = 0 }; $survDay[$sd] = $sv }
@@ -449,11 +479,14 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   }
   Write-Host ("   [{0:n1}s] pesquisa $key : responses=$respTot matched=$respMatch  tiers f=$($tierTot.f) m=$($tierTot.m) q=$($tierTot.q)" -f $T.Elapsed.TotalSeconds)
 
+  # respOpts: hashtable dimKey -> array de labels (code table das respostas cruas)
+  $respOpts = @{}; foreach ($dk in $DK8p) { $respOpts[$dk] = @($optArr[$dk].ToArray()) }
   # Return INTERMEDIATE state (rollup happens in Finalize-Funnel, AFTER sales attribution).
   return @{
     key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex; nameIndex = $nmIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
-    tierTot = $tierTot; abcTot = $abcTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay
+    tierTot = $tierTot; abcTot = $abcTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay;
+    respRows = @($respRows); respOpts = $respOpts
   }
 }
 
@@ -628,6 +661,7 @@ function Finalize-Funnel($fn, $dow) {
     totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
     editions = @($eds); survDaily = @($svArr)
     daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
+    resp = @($fn.respRows); respOpts = $fn.respOpts
   }
 }
 
@@ -715,6 +749,7 @@ function FunnelPayload($f) {
     totalRev = $f.totalRev; totalSales = $f.totalSales
     editions = @($f.editions); survDaily = @($f.survDaily)
     daily = @($f.daily); grain = @($f.grain)
+    resp = @($f.resp); respOpts = $f.respOpts
   }
 }
 
@@ -802,7 +837,7 @@ $payload = @{
   product       = 'Formula dos Investimentos'
   sales         = $salesInfo
   validation    = $validation
-  names         = @{ c = @($CampArr.ToArray()); s = @($SetArr.ToArray()); a = @($AdArr.ToArray()) }
+  names         = @{ c = @($CampArr.ToArray()); s = @($SetArr.ToArray()); a = @($AdArr.ToArray()); src = @($SrcArr.ToArray()); med = @($MedArr.ToArray()) }
   segunda       = FunnelPayload $seg
   terca         = FunnelPayload $ter
   diario        = FunnelPayload $dia
