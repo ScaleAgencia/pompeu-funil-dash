@@ -300,7 +300,10 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetCol = 7) {
+  # $leadSetCol: coluna do lead que e o CONJUNTO (adset). Diario/seg/ter = utm_term(7);
+  #   2-dias usa utm_medium(5) porque la o utm_term e o POSICIONAMENTO (Reels/Stories), nao o adset.
+  #   Assim conjunto (utm_medium) e anuncio (utm_content=8) casam com a query (AdSet col3 / AdName col2).
   # $campMust/$campMustNot: separam funis que COMPARTILHAM a query (ex: diario x 2-dias no mesmo gid).
   #   query so entra no grain se o utm_campaign CONTEM $campMust e NAO contem $campMustNot.
   function CampOk($nm) {
@@ -391,7 +394,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
       $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
-      $sv = $r[7]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
+      $sv = $r[$leadSetCol]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
       $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = if ($decodeUtm) { Canon $av } else { $av.Trim() }; if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
     }
     $gk = "$d|$p|$ci|$si|$ai"
@@ -688,7 +691,8 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: exclui as campanhas do 2-dias (WBN-2DIAS) da query compartilhada
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true '' $CAMP_2DIAS
 # 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $null $QID_DIARIO $LID 'exact' $true $true $false $true $false $CAMP_2DIAS ''
+# leadSetCol=5: no 2-dias o conjunto e o utm_medium (col5); o utm_term e posicionamento
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $null $QID_DIARIO $LID 'exact' $true $true $false $true $false $CAMP_2DIAS '' 5
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
