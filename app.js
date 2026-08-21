@@ -308,27 +308,32 @@
     var a = agg(f, st.lo, st.hi);
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
-    var isDaily = key === 'diario';
+    var isDaily = key === 'diario' || key === 'dias2';
     if (isDaily) {
+      var hasScore = (f.respTot || 0) > 0;   // funil tem pesquisa/leadscore? (2-dias ainda nao)
       var sub = DSUB, dview;
       if (sub === 'roas') {
         dview = dailyRoasStrip(a) + receitaBlock(a) +
           '<div class="section-title">ROAS projetado por campanha e anúncio <span class="st-line"></span></div>' + roasBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       } else if (sub === 'perfil') {
-        dview = perfilDiario(f, st.lo, st.hi);
+        dview = hasScore ? perfilDiario(f, st.lo, st.hi) : noScoreMsg();
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
-      } else {
+      } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
+      } else {
+        dview = capOptBanner() + chartsBlock(key) +
+          '<div class="section-title">Otimização por CPL <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· vira ROAS quando cair venda</span><span class="st-line"></span></div>' +
+          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'perfil' ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
-      if (sub === 'perfil') { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
+      if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
       wireTrees(key);
       return;
     }
@@ -668,6 +673,14 @@
   function roasBanner() {
     return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
   }
+  // 2-DIAS (funil novo sem pesquisa ainda): otimização por CPL
+  function capOptBanner() {
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Funil de <b>captação</b> do Webinar 2 Dias — ainda <b>sem pesquisa/leadscore</b> (campanha nasceu em 21/08). Otimize por <b>CPL</b>: <b>Acelerar</b> quando o CPL é barato (≤ 0,8× a mediana) · <b>Revisar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Quando começar a cair venda, a coluna vira <b>ROAS</b> sozinha. Meta com imposto ×1,1385; Google sem.</div></div>';
+  }
+  function noScoreMsg() {
+    return '<div class="section-title">Perfil do lead · Webinar 2 Dias <span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:0">⏳ <div><b>Aguardando as respostas da pesquisa do Webinar 2 Dias.</b> Este funil é novíssimo (começou em 21/08) e ainda não tem uma aba de pesquisa vinculada. Assim que as respostas começarem a cair, o <b>leadscore A/B/C</b>, o <b>perfil</b>, as <b>pizzas de aderência ao comprador</b>, o <b>índice de conversão por resposta</b> e o <b>gráfico diário de qualidade</b> aparecem aqui automaticamente — a mesma máquina do Diário, sem eu precisar mexer. Por enquanto, use <b>🎯 Otimização</b> (por CPL) e <b>📊 Consolidado</b>. Quando tiver a aba da pesquisa, me manda que eu ligo em 1 minuto.</div></div>';
+  }
   // strip de leadscore A/B/C do diario (no lugar do Frio/Morno/Quente)
   function abcStrip(a) {
     var tot = (a.la + a.lb + a.lc) || 1;
@@ -858,9 +871,9 @@
       clr + '</div>';
   }
   function wirePerfilFilters() {
-    function bind(id, key) { var e = $('#' + id); if (e) e.onchange = function () { PF[key] = +this.value; renderFunnel('diario'); }; }
+    function bind(id, key) { var e = $('#' + id); if (e) e.onchange = function () { PF[key] = +this.value; renderFunnel(CUR); }; }
     bind('pfSrc', 'src'); bind('pfMed', 'med'); bind('pfCamp', 'camp'); bind('pfSet', 'set'); bind('pfAd', 'ad');
-    var c = $('#pfClr'); if (c) c.onclick = function () { PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 }; renderFunnel('diario'); };
+    var c = $('#pfClr'); if (c) c.onclick = function () { PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 }; renderFunnel(CUR); };
   }
   // dim card orientado por distribuição filtrada (barra empilhada A/B/C + índice de conversão)
   function dimCardR(dk, label, pd, ro) {
@@ -1313,18 +1326,29 @@
      ROUTER
   ===================================================================== */
   var mounted = {};
-  // A dash e so o funil DIARIO agora: as abas de topo = as visoes do diario (otim/roas/perfil/consol).
+  var CUR = 'diario';   // funil ativo: diario | dias2
+  var FNAME = { diario: 'WEBINAR DIÁRIO', dias2: 'WEBINAR 2 DIAS' };
+  // abas de topo = visoes do funil ativo (otim/roas/perfil/consol).
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-    Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-diario'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-' + CUR); });
     DSUB = tab;
-    if (!mounted.diario) { mounted.diario = true; mountFunnel('diario'); }
-    else renderFunnel('diario');
+    if (!mounted[CUR]) { mounted[CUR] = true; mountFunnel(CUR); }
+    else renderFunnel(CUR);
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
+  function switchFunnel(fk) {
+    if (fk === CUR || !D[fk]) return;
+    CUR = fk;
+    PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 };   // zera filtro UTM ao trocar de funil
+    var bt = document.getElementById('brandTitle'); if (bt) bt.textContent = FNAME[fk] || 'WEBINAR';
+    Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fnl'), function (b) { b.classList.toggle('active', b.getAttribute('data-fnl') === fk); });
+    show(DSUB);
+  }
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fnl'), function (b) { b.addEventListener('click', function () { switchFunnel(b.getAttribute('data-fnl')); }); });
   window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });
 
   // header meta

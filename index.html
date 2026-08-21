@@ -5,14 +5,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?t=20260819e">
+<link rel="stylesheet" href="styles.css?t=20260821a">
 
 <div id="app">
   <header class="topbar">
     <div class="brand">
       <div class="logo-mark">P</div>
       <div class="brand-txt">
-        <div class="brand-title">WEBINAR DIÁRIO</div>
+        <div class="brand-title" id="brandTitle">WEBINAR DIÁRIO</div>
         <div class="brand-sub">Captação · FDI</div>
       </div>
     </div>
@@ -28,8 +28,15 @@
     </div>
   </header>
 
+  <div class="funnel-bar" id="funnelBar">
+    <span class="fb-label">Funil</span>
+    <button class="fnl active" data-fnl="diario">📆 Webinar Diário</button>
+    <button class="fnl" data-fnl="dias2">🗓️ Webinar 2 Dias</button>
+  </div>
+
   <main id="views">
     <section class="view active" id="view-diario"></section>
+    <section class="view" id="view-dias2"></section>
   </main>
 
   <footer class="foot">
@@ -40,5 +47,5 @@
 
 <div id="tooltip" class="chart-tip" hidden></div>
 
-<script src="data.js?t=20260819e"></script>
-<script src="app.js?t=20260819e"></script>
+<script src="data.js?t=20260821a"></script>
+<script src="app.js?t=20260821a"></script>
