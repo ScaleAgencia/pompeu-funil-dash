@@ -37,7 +37,7 @@ $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 $G_LEADS_2DIAS  = 'v6'        # aba v6 (todos os leads sao do 2-dias; Tag = WBN-2026-DIARIO-DOMINGO-2-DIAS)
 $TAG_2DIAS      = 'WBN-2026-DIARIO-DOMINGO-2-DIAS'
 $CAMP_2DIAS     = 'WBN-2DIAS' # sufixo do utm_campaign que separa 2-dias do diario na query compartilhada
-# 2-dias ainda SEM aba de pesquisa (campanha nova) -> funil de captacao; leadscore/perfil ligam quando a pesquisa existir
+$G_PESQ_2DIAS   = 1342965621 # aba "PESQUISA DIARIO 2 DIAS" (mesmas colunas/params do diario)
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -691,8 +691,8 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: exclui as campanhas do 2-dias (WBN-2DIAS) da query compartilhada
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true '' $CAMP_2DIAS
 # 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
-# leadSetCol=5: no 2-dias o conjunto e o utm_medium (col5); o utm_term e posicionamento
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $null $QID_DIARIO $LID 'exact' $true $true $false $true $false $CAMP_2DIAS '' 5
+# leadSetCol=5: no 2-dias o conjunto e o utm_medium (col5); o utm_term e posicionamento. abcScore=$true (leadscore ligado, mesmos params do diario)
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'exact' $true $true $false $true $true $CAMP_2DIAS '' 5
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
@@ -849,7 +849,7 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
 }
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
 $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
-$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv')) $script:FDI_BUYERS $matCut
+$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv'), (Join-Path $dataDir 'dias2_pesq.csv')) $script:FDI_BUYERS $matCut
 Write-Host ("   validacao: {0} leads maturados, {1} compradores | Quente {2}/{3} Morno {4}/{5} Frio {6}/{7}" -f $validation.leads, $validation.buyers, $validation.tier.q.b, $validation.tier.q.n, $validation.tier.m.b, $validation.tier.m.n, $validation.tier.f.b, $validation.tier.f.n)
 $payload = @{
   generatedAt   = (Get-Date).ToUniversalTime().ToString('o')
