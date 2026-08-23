@@ -36,7 +36,7 @@ $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 # --- Webinar 2 DIAS (funil novo 21/08/2026; leads na aba v6; MESMAS queries do diario, campanha termina em "WBN-2DIAS") ---
 $G_LEADS_2DIAS  = 'v6'        # aba v6 (todos os leads sao do 2-dias; Tag = WBN-2026-DIARIO-DOMINGO-2-DIAS)
 $TAG_2DIAS      = 'WBN-2026-DIARIO-DOMINGO-2-DIAS'
-$CAMP_2DIAS     = 'WBN-2DIAS' # sufixo do utm_campaign que separa 2-dias do diario na query compartilhada
+$CAMP_2DIAS     = 'WBN2DIAS'  # forma NORMALIZADA (sem separador) do sufixo que separa 2-dias do diario; pega "WBN-2DIAS" (Meta) e "WBN_2DIAS" (Google/YT)
 $G_PESQ_2DIAS   = 1342965621 # aba "PESQUISA DIARIO 2 DIAS" (mesmas colunas/params do diario)
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -300,15 +300,19 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetCol = 7) {
-  # $leadSetCol: coluna do lead que e o CONJUNTO (adset). Diario/seg/ter = utm_term(7);
-  #   2-dias usa utm_medium(5) porque la o utm_term e o POSICIONAMENTO (Reels/Stories), nao o adset.
-  #   Assim conjunto (utm_medium) e anuncio (utm_content=8) casam com a query (AdSet col3 / AdName col2).
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7) {
+  # $leadSetColM/$leadSetColG: coluna do lead que e o CONJUNTO (adset), POR PLATAFORMA.
+  #   Diario/seg/ter = utm_term(7) nos dois. 2-DIAS: Facebook usa utm_medium(5) (la o utm_term e o
+  #   POSICIONAMENTO Reels/Stories); Google usa utm_term(7)="40-ANOS" (=AdGroup da query). Anuncio = utm_content(8) sempre.
   # $campMust/$campMustNot: separam funis que COMPARTILHAM a query (ex: diario x 2-dias no mesmo gid).
   #   query so entra no grain se o utm_campaign CONTEM $campMust e NAO contem $campMustNot.
+  #   NORMALIZA separadores (Meta usa "| WBN-2DIAS" hifen, Google usa "_WBN_2DIAS" underscore) ->
+  #   tira -_ |espaco e compara em maiuscula, entao 'WBN2DIAS' pega os dois.
+  function CampNorm($s) { return (([string]$s) -replace '[-_ |]', '').ToUpperInvariant() }
   function CampOk($nm) {
-    if ($campMust -ne '' -and ($nm -notlike "*$campMust*")) { return $false }
-    if ($campMustNot -ne '' -and ($nm -like "*$campMustNot*")) { return $false }
+    $n = CampNorm $nm
+    if ($campMust -ne '' -and ($n -notlike "*$campMust*")) { return $false }
+    if ($campMustNot -ne '' -and ($n -like "*$campMustNot*")) { return $false }
     return $true
   }
   Write-Host "== Funnel $key : downloading =="
@@ -394,7 +398,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
       $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
-      $sv = $r[$leadSetCol]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
+      $setCol = if ($p -eq 'g') { $leadSetColG } else { $leadSetColM }   # conjunto por plataforma (2-dias: FB=medium, Google=term)
+      $sv = $r[$setCol]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
       $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = if ($decodeUtm) { Canon $av } else { $av.Trim() }; if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
     }
     $gk = "$d|$p|$ci|$si|$ai"
@@ -691,8 +696,8 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: exclui as campanhas do 2-dias (WBN-2DIAS) da query compartilhada
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true '' $CAMP_2DIAS
 # 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
-# leadSetCol=5: no 2-dias o conjunto e o utm_medium (col5); o utm_term e posicionamento. abcScore=$true (leadscore ligado, mesmos params do diario)
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'exact' $true $true $false $true $true $CAMP_2DIAS '' 5
+# conjunto: Facebook=utm_medium(5), Google=utm_term(7). abcScore=$true (leadscore ligado, mesmos params do diario)
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'exact' $true $true $false $true $true $CAMP_2DIAS '' 5 7
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
