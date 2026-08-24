@@ -451,15 +451,6 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $score = ScoreOf $idade $nivel $valor $trava $result $renda $cap $motiv
     $tier = TierOf $score
     $band = if ($abcScore) { ClassABC $idade $nivel $valor $trava $renda $cap } else { '' }
-    $respTot++
-    $tierTot[$tier]++
-    if ($band -ne '') { $abcTot[$band]++ }
-    BumpDist $dist 'idade' $idade.Trim(); BumpDist $dist 'renda' $renda.Trim(); BumpDist $dist 'motiv' $motiv.Trim(); BumpDist $dist 'trava' $trava.Trim()
-    BumpDist $dist 'valor' $valor.Trim(); BumpDist $dist 'nivel' $nivel.Trim(); BumpDist $dist 'cap' $cap.Trim(); BumpDist $dist 'result' $result.Trim()
-    if ($tier -eq 'q') {
-      BumpDist $prof 'idade' $idade.Trim(); BumpDist $prof 'renda' $renda.Trim(); BumpDist $prof 'motiv' $motiv.Trim(); BumpDist $prof 'trava' $trava.Trim()
-      BumpDist $prof 'valor' $valor.Trim(); BumpDist $prof 'nivel' $nivel.Trim(); BumpDist $prof 'cap' $cap.Trim(); BumpDist $prof 'result' $result.Trim()
-    }
     # match to a lead (email then phone), pick registration closest <= survey date
     $sd = DKey $r[17]
     $cands = $null
@@ -480,25 +471,39 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
         else { $pick.node[$tier] += 1; if ($bf) { $pick.node[$bf] += 1 } }
       }
     }
-    # ---- linha crua p/ FILTRO POR UTM (so diario/abcScore, so respostas casadas c/ lead) ----
-    if ($abcScore -and $band -ne '' -and $null -ne $pick) {
-      $bc = switch ($band) { 'a' { 0 } 'b' { 1 } 'c' { 2 } default { 1 } }
-      [void]$respRows.Add(@(
-        $pick.node.d, $bc, $pick.src, $pick.med, $pick.node.c, $pick.node.s, $pick.node.a,
-        (OptCode $optArr $optMap 'idade'  $idade.Trim()),
-        (OptCode $optArr $optMap 'renda'  $renda.Trim()),
-        (OptCode $optArr $optMap 'motiv'  $motiv.Trim()),
-        (OptCode $optArr $optMap 'trava'  $trava.Trim()),
-        (OptCode $optArr $optMap 'valor'  $valor.Trim()),
-        (OptCode $optArr $optMap 'nivel'  $nivel.Trim()),
-        (OptCode $optArr $optMap 'cap'    $cap.Trim()),
-        (OptCode $optArr $optMap 'result' $result.Trim())
-      ))
-    }
-    # tally por DATA DA RESPOSTA (bate com a planilha ao filtrar por dia)
-    if ($sd -ne '') {
-      $sv = $survDay[$sd]; if ($null -eq $sv) { $sv = @{ tot = 0; mat = 0 }; $survDay[$sd] = $sv }
-      $sv.tot += 1; if ($didMatch) { $sv.mat += 1 }
+    # ==== AGREGADOS DO FUNIL: contam SO respostas que sao DESTE funil (casaram c/ um lead dele). ====
+    #   A aba de pesquisa pode ser COMPARTILHADA: "PESQUISA DIARIO 2 DIAS" (gid 1342965621) tem
+    #   ~4135 respostas do DIARIO + ~584 do 2-dias no mesmo lugar. Sem esse gate o 2-dias contaria 5095.
+    if ($didMatch) {
+      $respTot++
+      $tierTot[$tier]++
+      if ($band -ne '') { $abcTot[$band]++ }
+      BumpDist $dist 'idade' $idade.Trim(); BumpDist $dist 'renda' $renda.Trim(); BumpDist $dist 'motiv' $motiv.Trim(); BumpDist $dist 'trava' $trava.Trim()
+      BumpDist $dist 'valor' $valor.Trim(); BumpDist $dist 'nivel' $nivel.Trim(); BumpDist $dist 'cap' $cap.Trim(); BumpDist $dist 'result' $result.Trim()
+      if ($tier -eq 'q') {
+        BumpDist $prof 'idade' $idade.Trim(); BumpDist $prof 'renda' $renda.Trim(); BumpDist $prof 'motiv' $motiv.Trim(); BumpDist $prof 'trava' $trava.Trim()
+        BumpDist $prof 'valor' $valor.Trim(); BumpDist $prof 'nivel' $nivel.Trim(); BumpDist $prof 'cap' $cap.Trim(); BumpDist $prof 'result' $result.Trim()
+      }
+      # linha crua p/ FILTRO POR UTM (so diario/abcScore)
+      if ($abcScore -and $band -ne '') {
+        $bc = switch ($band) { 'a' { 0 } 'b' { 1 } 'c' { 2 } default { 1 } }
+        [void]$respRows.Add(@(
+          $pick.node.d, $bc, $pick.src, $pick.med, $pick.node.c, $pick.node.s, $pick.node.a,
+          (OptCode $optArr $optMap 'idade'  $idade.Trim()),
+          (OptCode $optArr $optMap 'renda'  $renda.Trim()),
+          (OptCode $optArr $optMap 'motiv'  $motiv.Trim()),
+          (OptCode $optArr $optMap 'trava'  $trava.Trim()),
+          (OptCode $optArr $optMap 'valor'  $valor.Trim()),
+          (OptCode $optArr $optMap 'nivel'  $nivel.Trim()),
+          (OptCode $optArr $optMap 'cap'    $cap.Trim()),
+          (OptCode $optArr $optMap 'result' $result.Trim())
+        ))
+      }
+      # por DATA DA RESPOSTA (so casadas deste funil)
+      if ($sd -ne '') {
+        $sv = $survDay[$sd]; if ($null -eq $sv) { $sv = @{ tot = 0; mat = 0 }; $survDay[$sd] = $sv }
+        $sv.tot += 1; $sv.mat += 1
+      }
     }
   }
   Write-Host ("   [{0:n1}s] pesquisa $key : responses=$respTot matched=$respMatch  tiers f=$($tierTot.f) m=$($tierTot.m) q=$($tierTot.q)" -f $T.Elapsed.TotalSeconds)
@@ -693,8 +698,10 @@ function Finalize-Funnel($fn, $dow) {
 $segI = Build-Funnel 'segunda' 'WBN-2026-S' $G_META_SEG  $G_GOOG_SEG  $G_LEADS_SEG   $G_PESQ_SEG
 $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS_TERCA $G_PESQ_TERCA
 # DIARIO: Meta + Google (mesma planilha QID_DIARIO), tag exata WBN-2026-DIARIO; Meta com Ad<->AdSet trocados + utm URL-encoded (+->espaco); Google col padrao + utm plano
-# DIARIO: exclui as campanhas do 2-dias (WBN-2DIAS) da query compartilhada
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true '' $CAMP_2DIAS
+# DIARIO: query = campanhas que COMECAM com "WBN-DIARIO" (campMust) E NAO sao 2-dias (campMustNot).
+#   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
+#   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' $CAMP_2DIAS
 # 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
 # conjunto: Facebook=utm_medium(5), Google=utm_term(7). abcScore=$true (leadscore ligado, mesmos params do diario)
 $dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'exact' $true $true $false $true $true $CAMP_2DIAS '' 5 7

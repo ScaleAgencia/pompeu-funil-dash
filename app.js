@@ -422,9 +422,9 @@
       // secondary metrics
       card3('📊 Alcance & cliques', fInt(a.gIm + a.mIm) + ' <span style="font-size:13px;color:var(--muted)">impr.</span>',
         '<span>Cliques <span class="kv">' + fInt(a.gCk + a.mCk) + '</span></span><span>CTR <span class="kv">' + fPct(a.ctr) + '</span></span><span>CPM <span class="kv">' + money(a.cpm) + '</span></span>') +
-      // response rate — respostas por DATA DA RESPOSTA (bate com a planilha)
-      card3('📝 Respostas <span class="pill-plat m" style="background:rgba(91,157,255,.14);color:var(--goog)">totais</span>', fInt(a.respTotal),
-        '<span>do tráfego <span class="kv">' + fInt(a.respTraffic) + '</span></span><span>Taxa resp. <span class="kv">' + fPct(a.respRate) + '</span></span><span style="color:var(--muted2)">contadas pela data da resposta</span>') +
+      // respostas = SO as que casaram com um lead deste funil (a aba de pesquisa pode ser compartilhada)
+      card3('📝 Respostas', fInt(a.respTotal),
+        '<span>Taxa de resposta <span class="kv">' + fPct(a.respRate) + '</span></span><span style="color:var(--muted2)">respostas casadas com leads deste funil</span>') +
       // qualified
       card3('🔥 Qualificados <span class="pill-plat m" style="background:rgba(255,106,77,.16);color:var(--hot)">Quente</span>', fInt(a.q),
         '<span>% qualif <span class="kv">' + fPct(a.pctQ) + '</span></span><span>CPL qualif. <span class="kv">' + money(a.cplQ) + '</span></span>' + (a.scoped ? '<span style="color:var(--muted2)">qualif. desde ' + dfull(D.surveyStart) + '</span>' : '')) +
