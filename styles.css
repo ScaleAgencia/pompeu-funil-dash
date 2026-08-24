@@ -370,6 +370,16 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 /* barra empilhada A/B/C no dim card */
 .abc-track{height:20px;background:var(--panel3);border-radius:6px;overflow:hidden;display:flex}
 .abc-track i{height:100%;display:block}
+/* ---- acompanhamento geral ---- */
+.ac-hero{display:flex;align-items:center;gap:18px;background:linear-gradient(170deg,var(--panel),var(--bg2));border:1px solid var(--line);border-left-width:4px;border-radius:var(--r);padding:18px 22px;margin-bottom:16px}
+.ac-hero-ic{font-size:38px;line-height:1;flex:none}
+.ac-hero-t{font-size:19px;font-weight:800;letter-spacing:-.3px;font-family:var(--display)}
+.ac-hero-s{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.5;max-width:90ch}
+.ac-hero-s b{color:var(--txt)}
+.ac-delta{font-size:12px;font-weight:800;padding:2px 8px;border-radius:7px;font-family:var(--display);white-space:nowrap}
+.ac-delta.up{color:var(--teal);background:rgba(47,216,166,.14)}
+.ac-delta.down{color:var(--red);background:rgba(255,92,122,.14)}
+.ac-delta.neu{color:var(--muted2);background:rgba(148,163,184,.1)}
 .prof-item{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
 .prof-item .pi-l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .prof-item .pi-v{font-size:13px;font-weight:600;margin-top:4px}

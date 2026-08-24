@@ -97,11 +97,12 @@
     _RATES = v ? { f: rt(v.f, d.f), m: rt(v.m, d.m), q: rt(v.q, d.q) } : d;
     return _RATES;
   }
-  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, kids: {} }; }
+  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, lp: 0, im: 0, ck: 0, kids: {} }; }
   function accN(n, g) {
     n.sp += g.sp; if (g.d >= D.surveyStart) { n.qsp += g.sp; n.qld += g.ld; } if (g.d <= MAT_CUTOFF) n.spMat += g.sp;
     n.rev += g.rev || 0; n.sales += g.sales || 0;
     n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q; n.la += g.la || 0; n.lb += g.lb || 0; n.lc += g.lc || 0;
+    n.lp += g.lp || 0; n.im += g.im || 0; n.ck += g.ck || 0;
   }
   function finalize(n) {
     n.children = Object.keys(n.kids).map(function (k) { return finalize(n.kids[k]); });
@@ -318,6 +319,8 @@
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       } else if (sub === 'perfil') {
         dview = hasScore ? perfilDiario(f, st.lo, st.hi) : noScoreMsg();
+      } else if (sub === 'acomp') {
+        dview = hasScore ? acompanhamento(f, st.lo, st.hi) : noScoreMsg();
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
       } else if (hasScore) {
@@ -331,9 +334,10 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
+      if (sub === 'acomp' && hasScore) { qualityDaily($('#ch-acq-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); cplADaily($('#ch-accpla-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); }
       wireTrees(key);
       return;
     }
@@ -380,6 +384,109 @@
     return '<div class="banner">⏳ <div>A <b>pesquisa de qualificação</b> (leadscore) começou em <b>' + dfull(D.surveyStart) + '</b>. Selecione o período <b>“Pesquisa”</b> ou <b>“30 dias”</b> para ver taxa de resposta, qualificados e CPL qualificado.</div></div>';
   }
 
+  // ===== ACOMPANHAMENTO GERAL: saúde da captação por Lead A, tendência vs período anterior =====
+  var ACOMP_G = null;
+  function qualPeriod(f, lo, hi) {
+    var a = agg(f, lo, hi);
+    var scored = a.la + a.lb + a.lc;
+    var aFrac = scored ? a.la / scored : null;
+    var estA = aFrac != null ? a.leads * aFrac : null;        // Lead A projetado sobre todos os leads
+    var cplA = (estA && estA > 0) ? a.spend / estA : null;
+    return { lo: lo, hi: hi, leads: a.leads, spend: a.spend, la: a.la, lb: a.lb, lc: a.lc, scored: scored, aFrac: aFrac, estA: estA, cplA: cplA, sales: a.sales, rev: a.rev, dayArr: a.dayArr };
+  }
+  function acDays(lo, hi) { return Math.round((new Date(hi + 'T00:00:00') - new Date(lo + 'T00:00:00')) / 86400000) + 1; }
+  function acDelta(now, prev, lowerBetter) {
+    if (now == null || prev == null || prev === 0) return '<span class="ac-delta neu">—</span>';
+    var d = (now - prev) / Math.abs(prev) * 100;
+    var better = lowerBetter ? (now < prev) : (now > prev);
+    var cls = Math.abs(d) < 1.5 ? 'neu' : (better ? 'up' : 'down');
+    var arrow = d > 0.5 ? '▲' : (d < -0.5 ? '▼' : '•');
+    return '<span class="ac-delta ' + cls + '">' + arrow + ' ' + Math.abs(d).toFixed(0) + '%</span>';
+  }
+  function acCard(icon, label, valNow, deltaHtml, sub) {
+    return '<div class="card kpi"><div class="klabel">' + icon + ' ' + label + '</div><div class="kval" style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">' + valNow + (deltaHtml || '') + '</div><div class="ksub">' + (sub || '') + '</div></div>';
+  }
+  function pctBR(x, d) { return x == null ? '—' : (x).toFixed(d == null ? 1 : d).replace('.', ',') + '%'; }
+  function acompanhamento(f, lo, hi) {
+    var cur = qualPeriod(f, lo, hi); ACOMP_G = cur;
+    var len = acDays(lo, hi);
+    var prevHi = addDays(lo, -1), prevLo = addDays(prevHi, -(len - 1));
+    var prev = qualPeriod(f, prevLo, prevHi);
+    var aPctNow = cur.aFrac != null ? cur.aFrac * 100 : null, aPctPrev = prev.aFrac != null ? prev.aFrac * 100 : null;
+    // veredito de saúde: +1 se %A subiu, +1 se Custo/Lead A caiu
+    var better = 0, worse = 0;
+    if (aPctNow != null && aPctPrev != null) { if (aPctNow > aPctPrev * 1.02) better++; else if (aPctNow < aPctPrev * 0.98) worse++; }
+    if (cur.cplA != null && prev.cplA != null) { if (cur.cplA < prev.cplA * 0.98) better++; else if (cur.cplA > prev.cplA * 1.02) worse++; }
+    var verdict, vcolor, vicon;
+    if (better > worse) { verdict = 'Qualidade da captação MELHORANDO'; vcolor = 'var(--teal)'; vicon = '🟢'; }
+    else if (worse > better) { verdict = 'Qualidade da captação PIORANDO'; vcolor = 'var(--red)'; vicon = '🔴'; }
+    else { verdict = 'Qualidade da captação ESTÁVEL'; vcolor = 'var(--gold)'; vicon = '🟡'; }
+    var hero = '<div class="ac-hero" style="border-color:' + vcolor + '"><div class="ac-hero-ic">' + vicon + '</div>' +
+      '<div><div class="ac-hero-t" style="color:' + vcolor + '">' + verdict + '</div>' +
+      '<div class="ac-hero-s">Comparando <b>' + dfmt(lo) + '–' + dfmt(hi) + '</b> (' + len + ' dias) com o período anterior de mesmo tamanho (<b>' + dfmt(prevLo) + '–' + dfmt(prevHi) + '</b>). Foco: <b>volume</b> e <b>preço</b> do Lead A — o perfil que mais compra o FDI. Filtre o período lá em cima pra comparar semana passada, ontem, etc.</div></div></div>';
+    var cards = '<div class="kpi-row">' +
+      acCard('🟢', '% de Lead A', pctBR(aPctNow), acDelta(aPctNow, aPctPrev, false), 'antes <b>' + pctBR(aPctPrev) + '</b> · maior = melhor') +
+      acCard('🎯', 'Custo por Lead A', money(cur.cplA), acDelta(cur.cplA, prev.cplA, true), 'antes <b>' + money(prev.cplA) + '</b> · menor = melhor') +
+      acCard('📊', 'Volume de Lead A', fInt(Math.round(cur.estA || 0)), acDelta(cur.estA, prev.estA, false), 'estimado sobre ' + fInt(cur.leads) + ' leads') +
+      acCard('👥', 'Leads', fInt(cur.leads), acDelta(cur.leads, prev.leads, false), 'investido ' + fBRL0(cur.spend)) +
+      acCard('🛒', 'Compradores', fInt(cur.sales), acDelta(cur.sales, prev.sales, false), fBRL0(cur.rev) + ' de receita') +
+      '</div>';
+    var charts = '<div class="section-title" style="margin-top:4px">📈 Qualidade por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· faixa verde (Lead A) no topo subindo = captação melhorando</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>Composição A / B / C por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>A</span><span><i style="background:var(--gold)"></i>B</span><span><i style="background:var(--red)"></i>C</span></div></div><div id="ch-acq-' + f.key + '"></div></div>' +
+      '<div class="section-title">💵 Custo por Lead A por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· linha descendo = ficando mais barato captar Lead A</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>Custo/Lead A por dia</h4></div><div id="ch-accpla-' + f.key + '"></div><div class="chart-foot">Gasto do dia ÷ Lead A estimado do dia. Dias sem resposta de pesquisa ficam de fora.</div></div>';
+    // tabela por semana (últimas 4 semanas de 7 dias terminando em hi)
+    var wrows = '';
+    for (var w = 0; w < 4; w++) {
+      var whi = addDays(hi, -7 * w), wlo = addDays(whi, -6);
+      if (whi < f.leadMin) break;
+      var q = qualPeriod(f, wlo, whi);
+      var aP = q.aFrac != null ? q.aFrac * 100 : null;
+      var acolor = aP == null ? 'var(--muted)' : (aP >= 12 ? 'var(--teal)' : aP >= 8 ? 'var(--gold)' : 'var(--red)');
+      wrows += '<tr><td class="lbl">' + (w === 0 ? '<b>Esta semana</b>' : w === 1 ? 'Semana passada' : dfmt(wlo) + '–' + dfmt(whi)) + '<div class="sm">' + dfmt(wlo) + '–' + dfmt(whi) + '</div></td>' +
+        '<td style="color:' + acolor + ';font-weight:700">' + pctBR(aP) + '</td>' +
+        '<td>' + money(q.cplA) + '</td>' +
+        '<td>' + fInt(Math.round(q.estA || 0)) + '</td>' +
+        '<td>' + fInt(q.leads) + '</td>' +
+        '<td>' + fInt(q.sales) + '</td></tr>';
+    }
+    var table = '<div class="section-title">🗓️ Semana a semana <span class="st-line"></span></div>' +
+      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Período</th><th>% Lead A</th><th>Custo/Lead A</th><th>Vol. Lead A</th><th>Leads</th><th>Compradores</th></tr></thead><tbody>' + wrows + '</tbody></table></div>';
+    return '<div class="section-title">Acompanhamento geral · ' + (FNAME[f.key] ? titleCase(FNAME[f.key]) : 'Funil') + ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· saúde da captação visando Lead A</span><span class="st-line"></span></div>' +
+      hero + cards + charts + table +
+      '<div class="banner">🔎 <div>Esta aba responde <b>“a captação está melhorando ou piorando?”</b> olhando o que importa pra vender: <b>quanto Lead A</b> (o perfil que compra) você traz e <b>a que preço</b>. O veredito compara o período selecionado com o anterior de mesmo tamanho. Use o seletor de período no topo pra comparar ontem, 7 dias, semana passada, etc. Atualiza a cada 3h e recalcula a cada venda.</div></div>';
+  }
+  function titleCase(s) { return s.charAt(0) + s.slice(1).toLowerCase(); }
+  // linha de Custo/Lead A por dia
+  function cplADaily(host, days) {
+    if (!host) return;
+    var ds = days.filter(function (d) { return (d.la + d.lb + d.lc) > 0 && d.sp > 0 && d.ld > 0; }).map(function (d) {
+      var sc = d.la + d.lb + d.lc, estA = d.ld * (d.la / sc); return { date: d.date, cplA: estA > 0 ? d.sp / estA : null };
+    }).filter(function (d) { return d.cplA != null; });
+    if (!ds.length) { host.innerHTML = '<div class="empty">Sem dados suficientes (precisa de gasto + resposta de pesquisa no dia).</div>'; return; }
+    var W = 900, H = 200, pad = { l: 44, r: 10, t: 12, b: 24 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var maxC = Math.max.apply(null, ds.map(function (d) { return d.cplA; }).concat([1]));
+    var bw = iw / ds.length;
+    var s = svgEl(W, H);
+    for (var i = 0; i <= 3; i++) { var gy = pad.t + ih * i / 3; s += line(pad.l, gy, W - pad.r, gy, 'var(--line)'); s += txt(pad.l - 5, gy + 3, 'R$' + fInt(maxC * (3 - i) / 3), 'end', 9, 'var(--muted2)'); }
+    var pts = ds.map(function (d, k) { return [pad.l + bw * k + bw / 2, pad.t + ih - d.cplA / maxC * ih]; });
+    s += '<polyline points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round"></polyline>';
+    pts.forEach(function (p) { s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.6" fill="var(--gold)"></circle>'; });
+    labelSparse(ds, pad, bw, ih, function (t) { s += t; });
+    s += '</svg>';
+    host.innerHTML = s;
+    var svg = host.querySelector('svg'); if (!svg) return;
+    ds.forEach(function (d, k) {
+      var r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', pad.l + bw * k); r.setAttribute('y', pad.t); r.setAttribute('width', bw); r.setAttribute('height', ih);
+      r.setAttribute('fill', 'transparent'); r.style.cursor = 'crosshair';
+      r.addEventListener('mousemove', function (e) { showTip('<div class="tt-t">' + dfull(d.date) + '</div><div class="tt-r"><span>Custo/Lead A</span><b>' + money(d.cplA) + '</b></div>', e); });
+      r.addEventListener('mouseleave', hideTip);
+      svg.appendChild(r);
+    });
+  }
+
   function fRoas(x) { return (x || 0).toFixed(2).replace('.', ',') + '×'; }
   function retBar(lab, w, val, cls) { return '<div class="rr"><span>' + lab + '</span><div class="bar"><i class="' + cls + '" style="width:' + Math.max(2, w) + '%"></i></div><b>' + val + '</b></div>'; }
   function receitaBlock(a) {
@@ -401,8 +508,15 @@
       '</div>';
   }
 
+  // conversão de página (LPV é métrica do Meta): leads / visualizações de página; qualif = × fração de Lead A
+  function pageConv(a) {
+    var conv = a.mLp ? a.mLd / a.mLp : null;
+    var scored = (a.la + a.lb + a.lc);
+    var aFrac = scored ? a.la / scored : null;
+    return { conv: conv, convQ: (conv != null && aFrac != null) ? conv * aFrac : null };
+  }
   function kpiRow(key, a, metaOnly) {
-    var mColor = 'var(--meta)', gColor = 'var(--goog)';
+    var pc = pageConv(a);
     return '<div class="kpi-row">' +
       // Investment hero
       '<div class="card kpi hero"><div class="klabel">💰 Investimento total</div>' +
@@ -419,15 +533,12 @@
       card3('🎯 CPL', money(a.cpl),
         (metaOnly ? '<span>Meta <span class="kv">' + money(a.mCpl) + '</span></span>'
                   : '<span>G <span class="kv">' + money(a.gCpl) + '</span></span><span>M <span class="kv">' + money(a.mCpl) + '</span></span>')) +
-      // secondary metrics
-      card3('📊 Alcance & cliques', fInt(a.gIm + a.mIm) + ' <span style="font-size:13px;color:var(--muted)">impr.</span>',
-        '<span>Cliques <span class="kv">' + fInt(a.gCk + a.mCk) + '</span></span><span>CTR <span class="kv">' + fPct(a.ctr) + '</span></span><span>CPM <span class="kv">' + money(a.cpm) + '</span></span>') +
+      // conversão de página (só o que interessa: conv, conv qualif, CTR, CPM) — LPV é Meta
+      card3('📈 Conversão de página <span class="pill-plat m" style="background:rgba(224,91,176,.14);color:var(--meta)">Meta</span>', fPct(pc.conv),
+        '<span>qualif (A) <span class="kv">' + fPct(pc.convQ) + '</span></span><span>CTR <span class="kv">' + fPct(a.ctr) + '</span></span><span>CPM <span class="kv">' + money(a.cpm) + '</span></span>') +
       // respostas = SO as que casaram com um lead deste funil (a aba de pesquisa pode ser compartilhada)
       card3('📝 Respostas', fInt(a.respTotal),
         '<span>Taxa de resposta <span class="kv">' + fPct(a.respRate) + '</span></span><span style="color:var(--muted2)">respostas casadas com leads deste funil</span>') +
-      // qualified
-      card3('🔥 Qualificados <span class="pill-plat m" style="background:rgba(255,106,77,.16);color:var(--hot)">Quente</span>', fInt(a.q),
-        '<span>% qualif <span class="kv">' + fPct(a.pctQ) + '</span></span><span>CPL qualif. <span class="kv">' + money(a.cplQ) + '</span></span>' + (a.scoped ? '<span style="color:var(--muted2)">qualif. desde ' + dfull(D.surveyStart) + '</span>' : '')) +
       '</div>';
   }
   function card3(label, val, sub) {
@@ -964,7 +1075,7 @@
     var list = buildTree(f, plat, lo, hi);
     var withSp = list.filter(function (n) { return n.sp > 0; });
     var noSp = list.filter(function (n) { return n.sp <= 0; });
-    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); o.la += (n.la || 0); o.lb += (n.lb || 0); o.lc += (n.lc || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0, la: 0, lb: 0, lc: 0 });
+    var tot = list.reduce(function (o, n) { o.sp += n.sp; o.ld += n.ld; o.rev += (n.rev || 0); o.sales += (n.sales || 0); o.la += (n.la || 0); o.lb += (n.lb || 0); o.lc += (n.lc || 0); o.lp += (n.lp || 0); o.im += (n.im || 0); o.ck += (n.ck || 0); return o; }, { sp: 0, ld: 0, rev: 0, sales: 0, la: 0, lb: 0, lc: 0, lp: 0, im: 0, ck: 0 });
     DAILY_SALES = tot.sales > 0;
     MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
     MED_CPLA = median(withSp.filter(function (n) { return cplA(n) != null && n.la >= 2; }).map(function (n) { return cplA(n); }));
@@ -982,16 +1093,24 @@
       if (orph.ld > 0) rows += treeRowsDaily(orph, f.key, plat, '');
     }
     if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
+    // só o que interessa: conversão de página (leads/LPV, LPV é Meta), CTR, CPM
+    var convPag = tot.lp ? tot.ld / tot.lp : null;
+    var convPagQ = (convPag != null && sTot) ? convPag * (tot.la / sTot) : null;
+    var ctrT = tot.im ? tot.ck / tot.im : null;
+    var cpmT = tot.im ? tot.sp / (tot.im / 1000) : null;
+    var convItem = ot('📈 Conv. página' + (convPagQ != null ? ' <span style="color:var(--teal)">A ' + fPct(convPagQ) + '</span>' : ''), convPag == null ? '—' : fPct(convPag));
+    var effItem = ot('CTR · CPM', (ctrT == null ? '—' : fPct(ctrT)) + ' · ' + (cpmT == null ? '—' : money(cpmT)));
     var totals, head5;
     if (mode === 'abc') {
       totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
         ot('🎯 Custo/Lead A', money(cplATot)) +
         ot('🟢 Lead A', fInt(tot.la) + (sTot ? ' · ' + Math.round(tot.la / sTot * 100) + '%' : '')) +
-        ot('🔴 Lead C', fInt(tot.lc) + (sTot ? ' · ' + Math.round(tot.lc / sTot * 100) + '%' : ''));
+        convItem + effItem;
       head5 = sHead(sortKey, so, 'q', 'CPL A', 'tr-num');
     } else {
       totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
-        ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) + ot('Vendas', fInt(tot.sales));
+        ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) +
+        convItem + effItem;
       head5 = sHead(sortKey, so, 'q', 'ROAS', 'tr-num');
     }
     var head = sHead(sortKey, so, 'name', 'Campanha / ' + (isG ? 'grupo' : 'conjunto') + ' / anúncio', 'tr-name') +
@@ -1330,7 +1449,7 @@
   var FNAME = { diario: 'WEBINAR DIÁRIO', dias2: 'WEBINAR 2 DIAS' };
   // abas de topo = visoes do funil ativo (otim/roas/perfil/consol).
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, consol: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, acomp: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-' + CUR); });
