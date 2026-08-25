@@ -325,39 +325,64 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
 
   $grain = NewGrain
 
-  # ---- META queries. Default col order: Day,Campaign,AdSet,Ad,Spent,Impr,Reach,Clicks,Leads,LPV
-  #      DIARIO troca Ad<->AdSet: Day,Campaign,Ad,AdSet,... -> $metaAdBeforeSet
+  # ---- META queries. Detecta AdSet/Ad pelo NOME do cabecalho (ROBUSTO a reordenacao da query).
+  #   O cliente ja trocou a ordem 2x (Ad,AdSet <-> AdSet,Ad); ColOf acha a coluna certa case-insensitive.
+  #   Default: AdSet=col2, Ad=col3 (ordem normal). $metaAdBeforeSet vira so fallback se nao houver header.
+  $mHdr = @()
+  $mLines0 = [System.IO.File]::ReadAllLines($fMeta, [Text.Encoding]::UTF8)
+  if ($mLines0.Length -gt 0) { $h0 = $mLines0[0]; if ($h0.Length -ge 2 -and $h0[0] -eq '"' -and $h0[$h0.Length - 1] -eq '"') { $mHdr = $h0.Substring(1, $h0.Length - 2) -split '","', -1 } else { $mHdr = $h0 -split ',', -1 } }
+  $mCamCol = ColOf $mHdr @('Campaign Name', 'Campaign', 'Campanha', 'Nome da campanha') 1
+  $mSetCol = ColOf $mHdr @('Ad Set Name', 'AdSet Name', 'Ad Set', 'Conjunto', 'Nome do conjunto de anuncios') -1
+  $mAdCol  = ColOf $mHdr @('Ad Name', 'AdName', 'Anuncio', 'Nome do anuncio') -1
+  if ($mSetCol -lt 0 -or $mAdCol -lt 0) { if ($metaAdBeforeSet) { $mSetCol = 3; $mAdCol = 2 } else { $mSetCol = 2; $mAdCol = 3 } }   # sem header -> usa a flag
+  $mSpCol = ColOf $mHdr @('Amount Spent', 'Amount spent', 'Spend', 'Valor usado', 'Valor gasto') 4
+  $mImCol = ColOf $mHdr @('Impressions', 'Impressoes') 5
+  $mRcCol = ColOf $mHdr @('Reach', 'Alcance') 6
+  $mCkCol = ColOf $mHdr @('Link Clicks', 'Clicks', 'Cliques', 'Cliques no link') 7
+  $mPxCol = ColOf $mHdr @('Leads', 'Results', 'Resultados') 8
+  $mLpCol = ColOf $mHdr @('Landing Page Views', 'LPV', 'Visualizacoes da pagina de destino') 9
+  Write-Host ("   [meta] camp=col$mCamCol conjunto=col$mSetCol anuncio=col$mAdCol gasto=col$mSpCol")
   $rows = Read-Rows $fMeta
   foreach ($r in $rows) {
-    if ($r.Count -lt 6) { continue }
+    if ($r.Count -lt 5) { continue }
     $d = DKey $r[0]; if ($d -eq '') { continue }
-    $cnm = QN $r[1] $decodeUtm; if (-not (CampOk $cnm)) { continue }   # separa funis que compartilham a query
+    $cnm = QN $r[$mCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }   # separa funis que compartilham a query
     $ci = Intern $CampArr $CampMap $cnm
-    if ($metaAdBeforeSet) { $ai = Intern $AdArr $AdMap (QN $r[2] $decodeUtm); $si = Intern $SetArr $SetMap (QN $r[3] $decodeUtm) }
-    else                  { $si = Intern $SetArr $SetMap (QN $r[2] $decodeUtm); $ai = Intern $AdArr $AdMap (QN $r[3] $decodeUtm) }
+    $si = Intern $SetArr $SetMap (QN $r[$mSetCol] $decodeUtm)
+    $ai = Intern $AdArr  $AdMap  (QN $r[$mAdCol]  $decodeUtm)
     $n = GNode $grain $d 'm' $ci $si $ai
-    $n.sp += (PNum $r[4]) * $TAX
-    $n.im += (PNum $r[5])
-    if ($r.Count -gt 6) { $n.rc += (PNum $r[6]) }
-    if ($r.Count -gt 7) { $n.ck += (PNum $r[7]) }
-    if ($r.Count -gt 8) { $n.px += (PNum $r[8]) }
-    if ($r.Count -gt 9) { $n.lp += (PNum $r[9]) }
+    $n.sp += (PNum $r[$mSpCol]) * $TAX
+    if ($mImCol -ge 0 -and $r.Count -gt $mImCol) { $n.im += (PNum $r[$mImCol]) }
+    if ($mRcCol -ge 0 -and $r.Count -gt $mRcCol) { $n.rc += (PNum $r[$mRcCol]) }
+    if ($mCkCol -ge 0 -and $r.Count -gt $mCkCol) { $n.ck += (PNum $r[$mCkCol]) }
+    if ($mPxCol -ge 0 -and $r.Count -gt $mPxCol) { $n.px += (PNum $r[$mPxCol]) }
+    if ($mLpCol -ge 0 -and $r.Count -gt $mLpCol) { $n.lp += (PNum $r[$mLpCol]) }
   }
-  # ---- GOOGLE queries : Day,Campaign,AdGroup,Ad,Cost,Impr,Clicks,Conversions (pulado se $gGoog nulo)
+  # ---- GOOGLE queries : Day,Campaign,AdGroup,Ad,Cost,Impr,Clicks,Conversions (pulado se $gGoog nulo). Header-aware.
   if ($null -ne $fGoog) {
+    $gHdr = @(); $gLines0 = [System.IO.File]::ReadAllLines($fGoog, [Text.Encoding]::UTF8)
+    if ($gLines0.Length -gt 0) { $gh0 = $gLines0[0]; if ($gh0.Length -ge 2 -and $gh0[0] -eq '"' -and $gh0[$gh0.Length - 1] -eq '"') { $gHdr = $gh0.Substring(1, $gh0.Length - 2) -split '","', -1 } else { $gHdr = $gh0 -split ',', -1 } }
+    $gCamCol = ColOf $gHdr @('Campaign Name', 'Campaign', 'Campanha') 1
+    $gSetCol = ColOf $gHdr @('Ad Group Name', 'AdGroup Name', 'Ad Group', 'Grupo de anuncios', 'Grupo') 2
+    $gAdCol  = ColOf $gHdr @('Ad Name', 'AdName', 'Anuncio') 3
+    $gSpCol  = ColOf $gHdr @('Cost (Spend)', 'Cost', 'Spend', 'Custo') 4
+    $gImCol  = ColOf $gHdr @('Impressions', 'Impressoes') 5
+    $gCkCol  = ColOf $gHdr @('Clicks', 'Cliques') 6
+    $gPxCol  = ColOf $gHdr @('Conversions', 'Conversoes') 7
+    Write-Host ("   [google] camp=col$gCamCol grupo=col$gSetCol anuncio=col$gAdCol gasto=col$gSpCol")
     $rows = Read-Rows $fGoog
     foreach ($r in $rows) {
       if ($r.Count -lt 5) { continue }
       $d = DKey $r[0]; if ($d -eq '') { continue }
-      $cnm = QN $r[1] $decodeUtm; if (-not (CampOk $cnm)) { continue }
+      $cnm = QN $r[$gCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }
       $ci = Intern $CampArr $CampMap $cnm
-      $si = Intern $SetArr  $SetMap  (QN $r[2] $decodeUtm)
-      $ai = Intern $AdArr   $AdMap   (QN $r[3] $decodeUtm)
+      $si = Intern $SetArr  $SetMap  (QN $r[$gSetCol] $decodeUtm)
+      $ai = Intern $AdArr   $AdMap   (QN $r[$gAdCol]  $decodeUtm)
       $n = GNode $grain $d 'g' $ci $si $ai
-      $n.sp += (PNum $r[4])          # google: no tax
-      $n.im += (PNum $r[5])
-      if ($r.Count -gt 6) { $n.ck += (PNum $r[6]) }
-      if ($r.Count -gt 7) { $n.px += (PNum $r[7]) }
+      $n.sp += (PNum $r[$gSpCol])          # google: no tax
+      if ($gImCol -ge 0 -and $r.Count -gt $gImCol) { $n.im += (PNum $r[$gImCol]) }
+      if ($gCkCol -ge 0 -and $r.Count -gt $gCkCol) { $n.ck += (PNum $r[$gCkCol]) }
+      if ($gPxCol -ge 0 -and $r.Count -gt $gPxCol) { $n.px += (PNum $r[$gPxCol]) }
     }
   }
   Write-Host ("   [{0:n1}s] queries parsed" -f $T.Elapsed.TotalSeconds)
