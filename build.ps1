@@ -35,7 +35,7 @@ $G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO; src googl
 $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 # --- Webinar 2 DIAS (funil novo 21/08/2026; leads na aba v6; MESMAS queries do diario, campanha termina em "WBN-2DIAS") ---
 $G_LEADS_2DIAS  = 'v6'        # aba v6 (todos os leads sao do 2-dias; Tag = WBN-2026-DIARIO-DOMINGO-2-DIAS)
-$TAG_2DIAS      = 'WBN-2026-DIARIO-DOMINGO-2-DIAS'
+$TAG_2DIAS      = '2-DIAS'    # a v6 tem 3 edicoes: DOMINGO/SEGUNDA/TERCA-2-DIAS -> match por CONTEM "2-DIAS" (todas sao do webinar 2 dias)
 $CAMP_2DIAS     = 'WBN2DIAS'  # forma NORMALIZADA (sem separador) do sufixo que separa 2-dias do diario; pega "WBN-2DIAS" (Meta) e "WBN_2DIAS" (Google/YT)
 $G_PESQ_2DIAS   = 1342965621 # aba "PESQUISA DIARIO 2 DIAS" (mesmas colunas/params do diario)
 
@@ -403,11 +403,15 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   foreach ($r in $rows) {
     if ($r.Count -lt 10) { continue }
     $tag = $r[3]
-    if (-not $tag.StartsWith($tagPfx)) { continue }
-    if ($tagMode -eq 'num') {                          # tags numeradas (L1..,S1..): exige digito apos o prefixo
-      if ($tag.Length -le $pfxLen) { continue }
-      $c0 = $tag[$pfxLen]; if ($c0 -lt '0' -or $c0 -gt '9') { continue }
-    }                                                   # tagMode 'exact' (DIARIO): basta o StartsWith
+    if ($tagMode -eq 'contains') {                     # 2-DIAS: qualquer edicao (DOMINGO/SEGUNDA/TERCA)-2-DIAS na v6
+      if ($tag.IndexOf($tagPfx) -lt 0) { continue }
+    } else {
+      if (-not $tag.StartsWith($tagPfx)) { continue }
+      if ($tagMode -eq 'num') {                        # tags numeradas (L1..,S1..): exige digito apos o prefixo
+        if ($tag.Length -le $pfxLen) { continue }
+        $c0 = $tag[$pfxLen]; if ($c0 -lt '0' -or $c0 -gt '9') { continue }
+      }                                                 # tagMode 'exact' (DIARIO): basta o StartsWith
+    }
     $em = $r[1]; if ($em.IndexOf('@') -lt 0) { continue }
     $ts = $r[9]
     $ok = ($ts.Length -ge 10 -and $ts[2] -eq '/' -and $ts[5] -eq '/')
@@ -729,7 +733,7 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' $CAMP_2DIAS
 # 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
 # conjunto: Facebook=utm_medium(5), Google=utm_term(7). abcScore=$true (leadscore ligado, mesmos params do diario)
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'exact' $true $true $false $true $true $CAMP_2DIAS '' 5 7
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_2DIAS '' 5 7
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
