@@ -33,9 +33,11 @@ $G_META_DIARIO  = 0            # aba "Queries | WBN DIARIO" (col order: Day,Camp
 $G_GOOG_DIARIO  = 1609119011  # aba "Queries Google WBN DIARIO" (col order PADRAO: Day,Campaign,AdGroup,Ad,Cost,...)
 $G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO; src google-ads = Google, facebook-ads = Meta)
 $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
-# --- Webinar 2 DIAS (funil novo 21/08/2026; leads na aba v6; MESMAS queries do diario, campanha termina em "WBN-2DIAS") ---
-$G_LEADS_2DIAS  = 'v6'        # aba v6 (todos os leads sao do 2-dias; Tag = WBN-2026-DIARIO-DOMINGO-2-DIAS)
-$TAG_2DIAS      = '2-DIAS'    # a v6 tem 3 edicoes: DOMINGO/SEGUNDA/TERCA-2-DIAS -> match por CONTEM "2-DIAS" (todas sao do webinar 2 dias)
+# --- Webinar 2 DIAS (edicao SEMANAL; leads AGORA na aba v7 a partir de 01/09/2026; MESMAS queries do diario) ---
+#   v7: tag WBN-2026-SEMANAL-N, campanha "...2026-08-31 | WBN-2DIAS". Cohort v6 (agosto) ficou pra tras.
+#   Isola a campanha atual: dropLeadless (so campanha COM lead na v7) -> as campanhas velhas de agosto (0 lead na v7) saem.
+$G_LEADS_2DIAS  = 'v7'
+$TAG_2DIAS      = 'WBN-2026-SEMANAL'   # match por CONTEM (SEMANAL-1, SEMANAL-2, ... = edicoes semanais do webinar 2 dias)
 $CAMP_2DIAS     = 'WBN2DIAS'  # forma NORMALIZADA (sem separador) do sufixo que separa 2-dias do diario; pega "WBN-2DIAS" (Meta) e "WBN_2DIAS" (Google/YT)
 $G_PESQ_2DIAS   = 1342965621 # aba "PESQUISA DIARIO 2 DIAS" (mesmas colunas/params do diario)
 
@@ -655,10 +657,15 @@ function Attribute-Sales($funnels) {
 }
 
 # ---- Finalize: roll grain -> daily + grain array (after sales attributed) -
-function Finalize-Funnel($fn, $dow) {
+function Finalize-Funnel($fn, $dow, $dropLeadless = $false) {
   $grain = $fn.grain
+  # dropLeadless: remove campanhas SEM nenhum lead deste funil (isola o cohort atual quando a query e
+  #   compartilhada entre varias edicoes; ex: 2-dias v7 tem so a campanha de setembro, as de agosto saem).
+  $campLd = @{}
+  if ($dropLeadless) { foreach ($n in $grain.Values) { $campLd[$n.c] = [int]$campLd[$n.c] + $n.ld } }
   $dayMap = @{}
   foreach ($n in $grain.Values) {
+    if ($dropLeadless -and $campLd[$n.c] -eq 0) { continue }
     $k = "$($n.d)|$($n.p)"
     if (-not $dayMap.ContainsKey($k)) { $dayMap[$k] = @{ date = $n.d; p = $n.p; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; la = 0; lb = 0; lc = 0; rev = 0.0; sales = 0 } }
     $x = $dayMap[$k]
@@ -669,6 +676,7 @@ function Finalize-Funnel($fn, $dow) {
 
   $grArr = New-Object System.Collections.ArrayList
   foreach ($n in $grain.Values) {
+    if ($dropLeadless -and $campLd[$n.c] -eq 0) { continue }
     if ($n.sp -eq 0 -and $n.ld -eq 0 -and $n.rs -eq 0 -and $n.sales -eq 0) { continue }
     [void]$grArr.Add(@{ d = $n.d; p = $n.p; c = $n.c; s = $n.s; a = $n.a;
       sp = [Math]::Round($n.sp, 2); im = [int]$n.im; ck = [int]$n.ck; lp = [int]$n.lp; rc = [int]$n.rc; px = [int]$n.px;
@@ -731,14 +739,14 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 #   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
 #   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' $CAMP_2DIAS
-# 2 DIAS: leads na aba v6, MESMAS queries (Meta gid0 + Google) mas SO campanhas WBN-2DIAS; sem pesquisa ainda
-# conjunto: Facebook=utm_medium(5), Google=utm_term(7). abcScore=$true (leadscore ligado, mesmos params do diario)
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_2DIAS '' 5 7
+# 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
+#   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $null $QID_DIARIO $LID 'contains' $true $true $false $true $false $CAMP_2DIAS '' 5 7
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
-$dois2 = Finalize-Funnel $dois2I 0  # 2-DIAS: captacao (sem edicoes semanais)
+$dois2 = Finalize-Funnel $dois2I 0 $true  # 2-DIAS: captacao; dropLeadless=$true isola a campanha atual (v7) das velhas de agosto
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(

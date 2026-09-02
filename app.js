@@ -97,12 +97,13 @@
     _RATES = v ? { f: rt(v.f, d.f), m: rt(v.m, d.m), q: rt(v.q, d.q) } : d;
     return _RATES;
   }
-  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, lp: 0, im: 0, ck: 0, kids: {} }; }
+  function node(name, lvl) { return { name: name, lvl: lvl, sp: 0, qsp: 0, qld: 0, spMat: 0, rev: 0, sales: 0, ld: 0, rs: 0, f: 0, m: 0, q: 0, la: 0, lb: 0, lc: 0, lp: 0, im: 0, ck: 0, dm: {}, kids: {} }; }
   function accN(n, g) {
     n.sp += g.sp; if (g.d >= D.surveyStart) { n.qsp += g.sp; n.qld += g.ld; } if (g.d <= MAT_CUTOFF) n.spMat += g.sp;
     n.rev += g.rev || 0; n.sales += g.sales || 0;
     n.ld += g.ld; n.rs += g.rs; n.f += g.f; n.m += g.m; n.q += g.q; n.la += g.la || 0; n.lb += g.lb || 0; n.lc += g.lc || 0;
     n.lp += g.lp || 0; n.im += g.im || 0; n.ck += g.ck || 0;
+    var d = n.dm[g.d] || (n.dm[g.d] = { sp: 0, ld: 0, im: 0, ck: 0 }); d.sp += g.sp; d.ld += g.ld; d.im += g.im || 0; d.ck += g.ck || 0;   // serie por dia p/ o sparkline de CPL/dia
   }
   function finalize(n) {
     n.children = Object.keys(n.kids).map(function (k) { return finalize(n.kids[k]); });
@@ -329,8 +330,8 @@
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
       } else {
         dview = capOptBanner() + chartsBlock(key) +
-          '<div class="section-title">Otimização por CPL <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· vira ROAS quando cair venda</span><span class="st-line"></span></div>' +
-          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
+          '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM + CPL por dia (passe o mouse)</span><span class="st-line"></span></div>' +
+          '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'cpl') + optColDaily(f, 'm', st.lo, st.hi, 'cpl') + '</div>';
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
@@ -699,6 +700,11 @@
         renderFunnel(key);
       });
     });
+    // hover nas barrinhas de CPL/dia -> tooltip com CPL/leads/gasto do dia
+    Array.prototype.forEach.call(document.querySelectorAll('#fbody-' + key + ' .spk-bar'), function (b) {
+      b.addEventListener('mousemove', function (e) { showTip(decodeURIComponent(b.getAttribute('data-tip')), e); });
+      b.addEventListener('mouseleave', hideTip);
+    });
   }
   function pretty(s) { if (!s) return '—'; if (s === '(sem rastreio)' || s === '(sem)') return '— sem rastreio —'; return s; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -736,6 +742,22 @@
     if (ca == null) return '<div class="tr-num" title="' + ttl + '"><span class="qc muted">—</span></div>';
     return '<div class="tr-num" title="' + ttl + '"><span class="cpl-pill" style="color:' + cplColor(ca, MED_CPLA) + '">' + fBRL(ca) + '</span></div>';
   }
+  // sparkline de CPL por DIA (mini barras; hover mostra CPL/leads/gasto do dia) — coluna do modo captacao
+  function cplSparkCell(n) {
+    var dates = Object.keys(n.dm || {}).sort();
+    if (!dates.length) return '<div class="tr-num"><span class="qc muted">—</span></div>';
+    var days = dates.map(function (d) { var x = n.dm[d]; return { date: d, cpl: x.ld > 0 ? x.sp / x.ld : null, sp: x.sp, ld: x.ld }; });
+    var cpls = days.map(function (d) { return d.cpl; }).filter(function (c) { return c != null; });
+    var max = cpls.length ? Math.max.apply(null, cpls) : 1;
+    var bars = days.map(function (d) {
+      var h = d.cpl != null ? Math.max(12, Math.round(d.cpl / max * 100)) : 6;
+      var col = d.cpl == null ? 'var(--line2)' : cplColor(d.cpl, MED_CPL_D || null);
+      var tip = '<div class="tt-t">' + dfull(d.date) + '</div><div class="tt-r"><span>CPL</span><b>' + (d.cpl == null ? '—' : fBRL(d.cpl)) + '</b></div><div class="tt-r"><span>Leads</span><b>' + fInt(d.ld) + '</b></div><div class="tt-r"><span>Gasto</span><b>' + fBRL0(d.sp) + '</b></div>';
+      return '<i class="spk-bar" style="height:' + h + '%;background:' + col + '" data-tip="' + encodeURIComponent(tip) + '"></i>';
+    }).join('');
+    var last = days[days.length - 1];
+    return '<div class="tr-num"><div class="cpl-spark">' + bars + '</div><div class="spk-now">' + (last.cpl == null ? '' : fBRL(last.cpl)) + '</div></div>';
+  }
   function dailyRoas(n) { return (n.sp > 0 && (n.sales > 0 || n.rev > 0)) ? (n.rev / n.sp) : null; }
   function dailyTag(n) {
     if (n.sp <= 0 && n.ld <= 0) return null;
@@ -764,7 +786,7 @@
     if (sk === 'sp') return n.sp;
     if (sk === 'ld') return n.ld;
     if (sk === 'cpl') return n.cpl;
-    if (sk === 'q') return DMODE === 'abc' ? cplA(n) : dailyRoas(n);   // 5a coluna: custo por lead A ou ROAS
+    if (sk === 'q') return DMODE === 'abc' ? cplA(n) : (DMODE === 'cpl' ? n.cpl : dailyRoas(n));   // 5a coluna: CPL-A / CPL-dia / ROAS
     if (sk === 'acao') { var t = dTag(n); return t ? ACT_RANK[t.c] : 9; }
     return 0;
   }
@@ -1048,6 +1070,8 @@
     var cell5;
     if (DMODE === 'abc') {
       cell5 = abcCell(n);
+    } else if (DMODE === 'cpl') {
+      cell5 = cplSparkCell(n);
     } else {
       var r = dailyRoas(n);
       cell5 = '<div class="tr-num tr-q">' + (r == null
@@ -1107,6 +1131,11 @@
         ot('🟢 Lead A', fInt(tot.la) + (sTot ? ' · ' + Math.round(tot.la / sTot * 100) + '%' : '')) +
         convItem + effItem;
       head5 = sHead(sortKey, so, 'q', 'CPL A', 'tr-num');
+    } else if (mode === 'cpl') {
+      // captação pura (sem pesquisa/venda ainda): todas as métricas principais de otimização
+      totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('🎯 CPL', money(cpl)) +
+        convItem + effItem;
+      head5 = sHead(sortKey, so, 'q', '📈 CPL / dia', 'tr-num');
     } else {
       totals = ot('Investimento', fBRL0(tot.sp)) + ot('Leads', fInt(tot.ld)) + ot('CPL', money(cpl)) +
         ot('ROAS', roas == null ? '—' : fRoas(roas)) + ot('Receita', fBRL0(tot.rev)) +
@@ -1445,29 +1474,17 @@
      ROUTER
   ===================================================================== */
   var mounted = {};
-  var CUR = 'diario';   // funil ativo: diario | dias2
-  var FNAME = { diario: 'WEBINAR DIÁRIO', dias2: 'WEBINAR 2 DIAS' };
-  // abas de topo = visoes do funil ativo (otim/roas/perfil/consol).
+  var CUR = 'dias2';   // dash agora e SO o funil 2-dias
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, acomp: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-    Array.prototype.forEach.call(document.querySelectorAll('.view'), function (v) { v.classList.toggle('active', v.id === 'view-' + CUR); });
     DSUB = tab;
     if (!mounted[CUR]) { mounted[CUR] = true; mountFunnel(CUR); }
     else renderFunnel(CUR);
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
-  function switchFunnel(fk) {
-    if (fk === CUR || !D[fk]) return;
-    CUR = fk;
-    PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 };   // zera filtro UTM ao trocar de funil
-    var bt = document.getElementById('brandTitle'); if (bt) bt.textContent = FNAME[fk] || 'WEBINAR';
-    Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fnl'), function (b) { b.classList.toggle('active', b.getAttribute('data-fnl') === fk); });
-    show(DSUB);
-  }
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
-  Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fnl'), function (b) { b.addEventListener('click', function () { switchFunnel(b.getAttribute('data-fnl')); }); });
   window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });
 
   // header meta
