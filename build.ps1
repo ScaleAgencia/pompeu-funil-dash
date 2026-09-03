@@ -39,7 +39,7 @@ $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 $G_LEADS_2DIAS  = 'v7'
 $TAG_2DIAS      = 'WBN-2026-SEMANAL'   # match por CONTEM (SEMANAL-1, SEMANAL-2, ... = edicoes semanais do webinar 2 dias)
 $CAMP_2DIAS     = 'WBN2DIAS'  # forma NORMALIZADA (sem separador) do sufixo que separa 2-dias do diario; pega "WBN-2DIAS" (Meta) e "WBN_2DIAS" (Google/YT)
-$G_PESQ_2DIAS   = 1342965621 # aba "PESQUISA DIARIO 2 DIAS" (mesmas colunas/params do diario)
+$G_PESQ_2DIAS   = 'pesquisa_diario_2_dias'  # aba de pesquisa do 2-dias (compartilhada, tem ago+set); piso 01/09 no funil
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -302,7 +302,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '') {
   # $leadSetColM/$leadSetColG: coluna do lead que e o CONJUNTO (adset), POR PLATAFORMA.
   #   Diario/seg/ter = utm_term(7) nos dois. 2-DIAS: Facebook usa utm_medium(5) (la o utm_term e o
   #   POSICIONAMENTO Reels/Stories); Google usa utm_term(7)="40-ANOS" (=AdGroup da query). Anuncio = utm_content(8) sempre.
@@ -484,6 +484,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $band = if ($abcScore) { ClassABC $idade $nivel $valor $trava $renda $cap } else { '' }
     # match to a lead (email then phone), pick registration closest <= survey date
     $sd = DKey $r[17]
+    if ($survFrom -ne '' -and $sd -ne '' -and $sd -lt $survFrom) { continue }   # piso de data (aba compartilhada; 2-dias v7 so conta respostas >= 01/09)
     $cands = $null
     $ek = EmKey $r[1]
     if ($ek -ne '' -and $emIndex.ContainsKey($ek)) { $cands = $emIndex[$ek] }
@@ -741,7 +742,8 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' $CAMP_2DIAS
 # 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $null $QID_DIARIO $LID 'contains' $true $true $false $true $false $CAMP_2DIAS '' 5 7
+# pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
+$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_2DIAS '' 5 7 '2026-09-01'
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda

@@ -365,7 +365,7 @@
       var rc = r == null ? 'var(--muted)' : (r >= 1 ? 'var(--teal)' : r >= 0.5 ? 'var(--gold)' : 'var(--red)');
       return '<tr><td class="lbl"><span class="dot ' + dot + '"></span>' + nm + '</td><td>' + fBRL0(sp) + '</td><td>' + fBRL0(rev) + '</td><td>' + fInt(sl) + '</td><td style="color:' + rc + ';font-weight:700">' + (r == null ? '—' : fRoas(r)) + '</td></tr>';
     }
-    return '<div class="section-title">Consolidado · Webinar Diário <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· ROAS e faturamento total (cruzamento e-mail + telefone)</span><span class="st-line"></span></div>' +
+    return '<div class="section-title">Consolidado · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· ROAS e faturamento total (cruzamento e-mail + telefone)</span><span class="st-line"></span></div>' +
       dailyRoasStrip(a) +
       '<div class="receita-grid">' +
         card3('💵 Faturamento (FDI)', fBRL0(a.rev), '<span>atribuído por e-mail + WhatsApp</span>') +
@@ -378,7 +378,7 @@
         prow('Google Ads', 'g', a.gSp, a.gRev, a.gSl, gRoas) +
         '<tr class="tot">' + prow('Total', '', a.spend, a.rev, a.sales, a.roas).replace('<tr>', '').replace('</tr>', '') + '</tr>' +
       '</tbody></table></div>' +
-      '<div class="banner">🔎 <div>Faturamento e ROAS do funil diário inteiro (Meta + Google). Uma venda do FDI conta pro diário quando o <b>e-mail</b> do comprador bate num lead do diário, e o <b>WhatsApp confirma</b> quando existir na venda (hoje ~99% das vendas do FDI vêm sem WhatsApp, então o e-mail sustenta; o telefone vira double-check automático conforme o checkout for preenchendo). Atualiza a cada 3h.</div></div>';
+      '<div class="banner">🔎 <div>Faturamento e ROAS do funil 2 Dias inteiro (Meta + Google). Uma venda do FDI conta pro funil quando o <b>e-mail</b> do comprador bate num lead do 2-dias, e o <b>WhatsApp confirma</b> quando existir na venda (hoje ~99% das vendas do FDI vêm sem WhatsApp, então o e-mail sustenta; o telefone vira double-check automático conforme o checkout for preenchendo). Atualiza a cada 3h.</div></div>';
   }
 
   function coverageBanner() {
@@ -453,7 +453,7 @@
     }
     var table = '<div class="section-title">🗓️ Semana a semana <span class="st-line"></span></div>' +
       '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Período</th><th>% Lead A</th><th>Custo/Lead A</th><th>Vol. Lead A</th><th>Leads</th><th>Compradores</th></tr></thead><tbody>' + wrows + '</tbody></table></div>';
-    return '<div class="section-title">Acompanhamento geral · ' + (FNAME[f.key] ? titleCase(FNAME[f.key]) : 'Funil') + ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· saúde da captação visando Lead A</span><span class="st-line"></span></div>' +
+    return '<div class="section-title">Acompanhamento geral · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· saúde da captação visando Lead A</span><span class="st-line"></span></div>' +
       hero + cards + charts + table +
       '<div class="banner">🔎 <div>Esta aba responde <b>“a captação está melhorando ou piorando?”</b> olhando o que importa pra vender: <b>quanto Lead A</b> (o perfil que compra) você traz e <b>a que preço</b>. O veredito compara o período selecionado com o anterior de mesmo tamanho. Use o seletor de período no topo pra comparar ontem, 7 dias, semana passada, etc. Atualiza a cada 3h e recalcula a cada venda.</div></div>';
   }
@@ -845,7 +845,7 @@
     var dims = '<div class="section-title">O que os leads respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(barra colorida por A/B/C · índice de conversão por resposta, ao vivo)</span><span class="st-line"></span></div>' +
       '<div class="banner" style="margin-bottom:14px">📊 <div>O <b>índice de conversão</b> ao lado de cada resposta é o sinal real: <b style="color:var(--teal)">verde ≥ 1</b> converte acima da média, <b style="color:var(--red)">vermelho &lt; 1</b> abaixo. Recalculado a cada venda pelo cruzamento pesquisa × compradores. <b>Não confundir com peso de score</b> — a otimização usa as regras A/B/C, não soma de pontos. Ex.: aporte "até R$ 100" e "acima de R$ 2.000" aparecem com índice &lt; 1 (ruins) e <b>não contam pra Lead A</b>.</div></div>' +
       '<div class="dims-grid">' + PDK.map(function (dk) { return dimCardR(dk, dimLabel[dk] || dk, g.pdist[dk] || {}, RO[dk] || []); }).join('') + '</div>';
-    return '<div class="section-title">Perfil do lead · Webinar Diário <span class="st-line"></span></div>' +
+    return '<div class="section-title">Perfil do lead · Webinar 2 Dias <span class="st-line"></span></div>' +
       utmFilterBar(Rp) + qual + cards + aderenciaPanel(g, RO) + abcRuler() + dims;
   }
   // ---- PIZZAS (donut) — comparação leads × comprador, estilo SIP ----
@@ -909,13 +909,13 @@
     var macroBlock = '<div class="macro"><div class="macro-gauge">' + pieSvg([macro, 100 - macro], [adColor(macro), 'var(--panel3)'], 154, ['aderência', '']) +
       '<div class="mg-c"><span class="mg-v" style="color:' + adColor(macro) + '">' + Math.round(macro) + '%</span><span class="mg-l">aderência</span></div></div>' +
       '<div class="macro-txt"><div class="macro-big" style="color:' + adColor(macro) + '">' + verd + '</div>' +
-      '<div class="macro-sub">O quanto o mix de leads do diário se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
+      '<div class="macro-sub">O quanto o mix de leads do 2-dias se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
       '<div class="macro-a"><div class="ma-lab">% de <b class="cA">Lead A</b> (o perfil que mais compra)</div>' +
         '<div class="ma-row"><span>Leads (filtro)</span><div class="ma-tr"><i style="width:' + Math.min(100, aNow).toFixed(1) + '%"></i></div><b>' + aNow.toFixed(1).replace('.', ',') + '%</b></div>' +
         '<div class="ma-row"><span>Comprador FDI</span><div class="ma-tr"><i class="buy" style="width:' + Math.min(100, aBuy).toFixed(1) + '%"></i></div><b>' + aBuy.toFixed(1).replace('.', ',') + '%</b></div>' +
       '</div></div></div>';
     return '<div class="section-title" style="margin-top:6px">✅ Aderência ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o <b>mix dos leads do diário</b> com o de <b>quem realmente compra</b>, pergunta a pergunta.</div></div>' +
+      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o <b>mix dos leads do 2-dias</b> com o de <b>quem realmente compra</b>, pergunta a pergunta.</div></div>' +
       '<div class="kpi-row">' +
         convCard('🟢 Lead A converte', A, 'var(--teal)') +
         convCard('🟡 Lead B converte', B, 'var(--gold)') +
@@ -1085,6 +1085,7 @@
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
       cell5 +
+      (DMODE === 'abc' ? cplSparkCell(n) : '') +   // no modo leadscore, mantem tb o sparkline de CPL/dia
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
         (accelN > 0 && (!tag || tag.c !== 'acelerar') ? '<span class="accel-mark" title="' + accelN + ' anúncio(s) pra acelerar aqui dentro — clique pra abrir">⚡ Acelerar</span>' : '') +
       '</div>' +
@@ -1142,16 +1143,17 @@
         convItem + effItem;
       head5 = sHead(sortKey, so, 'q', 'ROAS', 'tr-num');
     }
+    var spkHead = mode === 'abc' ? '<div class="tr-num" title="CPL por dia">📈 CPL/dia</div>' : '';
     var head = sHead(sortKey, so, 'name', 'Campanha / ' + (isG ? 'grupo' : 'conjunto') + ' / anúncio', 'tr-name') +
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
       sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
-      head5 +
+      head5 + spkHead +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num');
     return '<div class="opt-col ' + plat + '">' +
       '<div class="opt-head"><div class="oh-ic">' + (isG ? 'G' : 'M') + '</div><div><h3>' + (isG ? 'Google Ads' : 'Meta Ads') + '</h3><div class="oh-sub">campanha › ' + (isG ? 'grupo' : 'conjunto') + ' › anúncio · ' + (isG ? 'sem imposto' : 'imposto ×1,1385') + '</div></div></div>' +
       '<div class="opt-totals">' + totals + '</div>' +
-      '<div class="tree dd">' +
+      '<div class="tree dd' + (mode === 'abc' ? ' spk' : '') + '">' +
       '<div class="tr-row head">' + head + '</div>' +
       rows + '</div></div>';
   }

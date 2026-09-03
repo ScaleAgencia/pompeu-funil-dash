@@ -500,3 +500,6 @@ body{
 *::-webkit-scrollbar{height:9px;width:9px}
 *::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
 *::-webkit-scrollbar-track{background:transparent}
+
+/* modo leadscore com coluna extra de CPL/dia (7 colunas) */
+.tree.dd.spk .tr-row{grid-template-columns:1fr 78px 50px 60px 74px 62px 88px}
