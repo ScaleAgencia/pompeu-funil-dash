@@ -322,6 +322,8 @@
         dview = hasScore ? perfilDiario(f, st.lo, st.hi) : noScoreMsg();
       } else if (sub === 'acomp') {
         dview = hasScore ? acompanhamento(f, st.lo, st.hi) : noScoreMsg();
+      } else if (sub === 'resp') {
+        dview = taxaResposta(f, st.lo, st.hi);
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
       } else if (hasScore) {
@@ -335,8 +337,9 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'otim') drawCharts(key, a);
+      if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
       if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
       if (sub === 'acomp' && hasScore) { qualityDaily($('#ch-acq-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); cplADaily($('#ch-accpla-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); }
       wireTrees(key);
@@ -383,6 +386,116 @@
 
   function coverageBanner() {
     return '<div class="banner">⏳ <div>A <b>pesquisa de qualificação</b> (leadscore) começou em <b>' + dfull(D.surveyStart) + '</b>. Selecione o período <b>“Pesquisa”</b> ou <b>“30 dias”</b> para ver taxa de resposta, qualificados e CPL qualificado.</div></div>';
+  }
+
+  // ===== TAXA DE RESPOSTA: leads cadastrados × pesquisas respondidas (em % e números) =====
+  var RESP_G = null;
+  function rrColor(x) { if (x == null) return 'var(--muted)'; if (x >= 0.6) return 'var(--teal)'; if (x >= 0.4) return 'var(--gold)'; return 'var(--red)'; }
+  function taxaResposta(f, lo, hi) {
+    // agrega direto do diário (ld + rs juntos): rs é atribuído ao dia de CADASTRO do lead -> taxa de resposta do cohort
+    var per = { ld: 0, rs: 0, mLd: 0, mRs: 0, gLd: 0, gRs: 0, oLd: 0, oRs: 0, days: {} };
+    arr(f.daily).forEach(function (r) {
+      if (r.date < lo || r.date > hi) return;
+      per.ld += r.ld; per.rs += r.rs;
+      if (r.p === 'g') { per.gLd += r.ld; per.gRs += r.rs; }
+      else if (r.p === 'm') { per.mLd += r.ld; per.mRs += r.rs; }
+      else { per.oLd += r.ld; per.oRs += r.rs; }
+      var d = per.days[r.date] || (per.days[r.date] = { date: r.date, ld: 0, rs: 0 });
+      d.ld += r.ld; d.rs += r.rs;
+    });
+    RESP_G = { dayArr: Object.keys(per.days).sort().map(function (k) { return per.days[k]; }) };
+    var recv = 0; arr(f.survDaily).forEach(function (s) { if (s.date >= lo && s.date <= hi) recv += s.tot; });  // qtd bruta de respostas recebidas (por data da resposta)
+    var noResp = per.ld - per.rs, rate = per.ld ? per.rs / per.ld : null;
+    var title = '<div class="section-title">Taxa de resposta da pesquisa · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· leads cadastrados × pesquisas respondidas</span><span class="st-line"></span></div>';
+    if (per.ld <= 0) return title + '<div class="card"><div class="empty">Sem leads cadastrados no período selecionado.</div></div>';
+    // KPIs
+    var cards = '<div class="kpi-row">' +
+      card3('👥 Leads cadastrados', fInt(per.ld),
+        '<span><span class="dot m"></span>Meta ' + fInt(per.mLd) + '</span><span><span class="dot g"></span>Google ' + fInt(per.gLd) + '</span>' + (per.oLd ? '<span>outros ' + fInt(per.oLd) + '</span>' : '')) +
+      card3('✅ Responderam a pesquisa', fInt(per.rs),
+        '<span>' + fInt(recv) + ' respostas recebidas</span><span style="color:var(--muted2)">leads distintos que responderam</span>') +
+      card3('⭕ Não responderam', fInt(noResp),
+        '<span>' + fPct(per.ld ? noResp / per.ld : 0) + ' dos cadastrados</span>') +
+      '<div class="card kpi hero"><div class="klabel">📊 Taxa de resposta</div><div class="kval" style="color:' + rrColor(rate) + '">' + fPct(rate) + '</div><div class="ksub"><span>responderam ÷ cadastrados</span></div></div>' +
+      '</div>';
+    // barra responderam × não
+    var wr = per.ld ? per.rs / per.ld * 100 : 0, wn = 100 - wr;
+    var bar = '<div class="card" style="margin-top:14px"><div class="klabel" style="margin-bottom:12px">Dos ' + fInt(per.ld) + ' leads cadastrados, quantos responderam a pesquisa</div>' +
+      '<div style="display:flex;height:36px;border-radius:9px;overflow:hidden;border:1px solid var(--line)">' +
+      '<div style="width:' + wr.toFixed(1) + '%;background:var(--teal);display:flex;align-items:center;justify-content:center;color:#04141b;font-weight:800;font-size:13px;white-space:nowrap">' + (wr > 12 ? fInt(per.rs) + ' · ' + fPct(rate, 0) : '') + '</div>' +
+      '<div style="width:' + wn.toFixed(1) + '%;background:var(--panel3);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;font-size:13px;white-space:nowrap">' + (wn > 12 ? fInt(noResp) + ' · ' + fPct(per.ld ? noResp / per.ld : 0, 0) : '') + '</div>' +
+      '</div>' +
+      '<div class="score-legend" style="margin-top:12px">' +
+      '<div class="li"><span class="sw" style="background:var(--teal)"></span><span><b>Responderam</b> ' + fInt(per.rs) + ' <span style="color:var(--muted)">(' + fPct(rate, 1) + ')</span></span></div>' +
+      '<div class="li"><span class="sw" style="background:var(--panel3)"></span><span><b>Não responderam</b> ' + fInt(noResp) + ' <span style="color:var(--muted)">(' + fPct(per.ld ? noResp / per.ld : 0, 1) + ')</span></span></div>' +
+      '</div></div>';
+    // por dia
+    var daily = '<div class="section-title" style="margin-top:2px">📅 Por dia de cadastro <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· barra = leads do dia · verde = responderam · % no topo = taxa (passe o mouse)</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>Cadastrados × responderam por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>Responderam</span><span><i style="background:var(--line2)"></i>Não responderam</span></div></div><div id="ch-resp-' + f.key + '"></div><div class="chart-foot">Cada lead é contado no seu dia de cadastro; a fatia verde é quem já respondeu a pesquisa. Só contam respostas a partir de ' + dfull('2026-09-01') + '.</div></div>';
+    // por plataforma
+    function rrow(nm, dot, ld, rs, cls) {
+      var nr = ld - rs, tx = ld ? rs / ld : null;
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="lbl">' + (dot ? '<span class="dot ' + dot + '"></span>' : '') + nm + '</td><td>' + fInt(ld) + '</td><td>' + fInt(rs) + '</td><td>' + fInt(nr) + '</td><td style="color:' + rrColor(tx) + ';font-weight:700">' + fPct(tx) + '</td></tr>';
+    }
+    var platTbl = '<div class="section-title">Por plataforma <span class="st-line"></span></div>' +
+      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Plataforma</th><th>Cadastrados</th><th>Responderam</th><th>Não resp.</th><th>Taxa</th></tr></thead><tbody>' +
+      rrow('Meta Ads', 'm', per.mLd, per.mRs) +
+      rrow('Google Ads', 'g', per.gLd, per.gRs) +
+      (per.oLd ? rrow('Sem rastreio / outros', '', per.oLd, per.oRs) : '') +
+      rrow('Total', '', per.ld, per.rs, 'tot') +
+      '</tbody></table></div>';
+    // por campanha
+    var camps = [];
+    ['m', 'g', 'o'].forEach(function (plat) {
+      buildTree(f, plat, lo, hi).forEach(function (c) { if (c.ld > 0) camps.push({ name: c.name, plat: plat, ld: c.ld, rs: c.rs }); });
+    });
+    camps.sort(function (a, b) { return b.ld - a.ld; });
+    var pdot = { m: 'm', g: 'g', o: '' };
+    var crows = camps.map(function (c) {
+      var tx = c.ld ? c.rs / c.ld : null;
+      return '<tr><td class="lbl"><span class="dot ' + pdot[c.plat] + '"></span><span title="' + esc(c.name) + '">' + esc(pretty(c.name)) + '</span></td><td>' + fInt(c.ld) + '</td><td>' + fInt(c.rs) + '</td><td>' + fInt(c.ld - c.rs) + '</td><td style="color:' + rrColor(tx) + ';font-weight:700">' + fPct(tx) + '</td></tr>';
+    }).join('');
+    var campTbl = '<div class="section-title">Por campanha <span class="st-line"></span></div>' +
+      '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Campanha</th><th>Cadastrados</th><th>Responderam</th><th>Não resp.</th><th>Taxa</th></tr></thead><tbody>' +
+      (crows || '<tr><td class="lbl" colspan="5">Sem campanhas no período.</td></tr>') + '</tbody></table></div>';
+    var banner = '<div class="banner">🔎 <div><b>Taxa de resposta</b> = leads que responderam a pesquisa ÷ leads cadastrados, no período selecionado (filtre lá em cima). Cada lead conta <b>uma vez</b> — quem respondeu mais de uma vez não é contado em dobro (por isso “responderam” pode ser menor que “respostas recebidas”). As respostas são casadas ao lead por <b>e-mail/telefone</b> e só contam <b>a partir de ' + dfull('2026-09-01') + '</b> (cohort do Webinar 2 Dias). Atualiza a cada 3h.</div></div>';
+    return title + cards + bar + daily + platTbl + campTbl + banner;
+  }
+  function respRateDaily(host, days) {
+    if (!host) return;
+    var ds = (days || []).filter(function (d) { return d.ld > 0; });
+    if (!ds.length) { host.innerHTML = '<div class="empty">Sem leads no período.</div>'; return; }
+    var W = 900, H = 220, pad = { l: 34, r: 10, t: 14, b: 24 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var max = Math.max.apply(null, ds.map(function (d) { return d.ld; })) || 1;
+    var bw = iw / ds.length, bar = Math.max(2, Math.min(bw * 0.72, 34));
+    var s = svgEl(W, H);
+    for (var i = 0; i <= 4; i++) { var gy = pad.t + ih * i / 4; s += line(pad.l, gy, W - pad.r, gy, 'var(--line)'); s += txt(pad.l - 5, gy + 3, fInt(Math.round(max * (4 - i) / 4)), 'end', 9, 'var(--muted2)'); }
+    ds.forEach(function (d, k) {
+      var cx = pad.l + bw * k + (bw - bar) / 2;
+      var hAll = d.ld / max * ih, hR = d.rs / max * ih;
+      var yAll = pad.t + ih - hAll, yR = pad.t + ih - hR;
+      s += '<rect x="' + cx + '" y="' + yAll + '" width="' + bar + '" height="' + hAll + '" fill="var(--line2)" rx="1"></rect>';
+      s += '<rect x="' + cx + '" y="' + yR + '" width="' + bar + '" height="' + hR + '" fill="var(--teal)" rx="1"></rect>';
+      if (bar >= 13) s += txt(cx + bar / 2, yAll - 3, Math.round(d.rs / d.ld * 100) + '%', 'middle', 9.5, 'var(--teal)');
+    });
+    labelSparse(ds, pad, bw, ih, function (t) { s += t; });
+    s += '</svg>';
+    host.innerHTML = s;
+    var svg = host.querySelector('svg'); if (!svg) return;
+    ds.forEach(function (d, k) {
+      var r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', pad.l + bw * k); r.setAttribute('y', pad.t); r.setAttribute('width', bw); r.setAttribute('height', ih);
+      r.setAttribute('fill', 'transparent'); r.style.cursor = 'crosshair';
+      r.addEventListener('mousemove', function (e) {
+        showTip('<div class="tt-t">' + dfull(d.date) + '</div>' +
+          '<div class="tt-r"><span>Cadastrados</span><b>' + fInt(d.ld) + '</b></div>' +
+          '<div class="tt-r"><span style="color:var(--teal)">Responderam</span><b>' + fInt(d.rs) + '</b></div>' +
+          '<div class="tt-r"><span>Taxa de resposta</span><b>' + fPct(d.ld ? d.rs / d.ld : 0) + '</b></div>', e);
+      });
+      r.addEventListener('mouseleave', hideTip);
+      svg.appendChild(r);
+    });
   }
 
   // ===== ACOMPANHAMENTO GERAL: saúde da captação por Lead A, tendência vs período anterior =====
@@ -1478,7 +1591,7 @@
   var mounted = {};
   var CUR = 'dias2';   // dash agora e SO o funil 2-dias
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, acomp: 1, consol: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
