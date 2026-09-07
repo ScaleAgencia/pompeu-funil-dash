@@ -1232,11 +1232,14 @@
     }
     if (!withSp.length && !noSp.length) rows = '<div class="empty">Sem investimento neste período.</div>';
     // só o que interessa: conversão de página (leads/LPV, LPV é Meta), CTR, CPM
-    var convPag = tot.lp ? tot.ld / tot.lp : null;
+    // Conversão de página: Meta divide por Landing Page Views (pixel); Google não tem LPV -> divide por Cliques (clique≈chegada na página)
+    var pvBase = isG ? tot.ck : tot.lp;
+    var convPag = pvBase ? tot.ld / pvBase : null;
     var convPagQ = (convPag != null && sTot) ? convPag * (tot.la / sTot) : null;
     var ctrT = tot.im ? tot.ck / tot.im : null;
     var cpmT = tot.im ? tot.sp / (tot.im / 1000) : null;
-    var convItem = ot('📈 Conv. página' + (convPagQ != null ? ' <span style="color:var(--teal)">A ' + fPct(convPagQ) + '</span>' : ''), convPag == null ? '—' : fPct(convPag));
+    var convLabel = isG ? '📈 Conv. clique→lead' : '📈 Conv. página';
+    var convItem = ot(convLabel + (convPagQ != null ? ' <span style="color:var(--teal)">A ' + fPct(convPagQ) + '</span>' : ''), convPag == null ? '—' : fPct(convPag));
     var effItem = ot('CTR · CPM', (ctrT == null ? '—' : fPct(ctrT)) + ' · ' + (cpmT == null ? '—' : money(cpmT)));
     var totals, head5;
     if (mode === 'abc') {
