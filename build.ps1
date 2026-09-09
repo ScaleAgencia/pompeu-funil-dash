@@ -40,6 +40,11 @@ $G_LEADS_2DIAS  = 'v7'
 $TAG_2DIAS      = 'WBN-2026-SEMANAL'   # match por CONTEM (SEMANAL-1, SEMANAL-2, ... = edicoes semanais do webinar 2 dias)
 $CAMP_2DIAS     = 'WBN2DIAS'  # forma NORMALIZADA (sem separador) do sufixo que separa 2-dias do diario; pega "WBN-2DIAS" (Meta) e "WBN_2DIAS" (Google/YT)
 $G_PESQ_2DIAS   = 'pesquisa_diario_2_dias'  # aba de pesquisa do 2-dias (compartilhada, tem ago+set); piso 01/09 no funil
+# --- CALCULADORA (funil novo, Meta + Google, comecou 07/09) ---
+#   Queries nas MESMAS abas do diario/2-dias (Meta gid0, Google gid1609119011), campanha CONTEM CALCULADORA.
+#   Leads na V5 (mesma aba do diario) com TAG do diario -> NAO da pra separar por tag; separa por utm_campaign=CALCULADORA.
+#   Sem pesquisa ainda -> captacao pura (CPL). Excluido do diario (campMustNot+leadCampMustNot) p/ atribuicao nao duplicar.
+$CAMP_CALC      = 'CALCULADORA'
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -302,7 +307,9 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '') {
+  # $leadCampMust/$leadCampMustNot: filtra o LEAD pela utm_campaign (normalizada), nao pela tag.
+  #   Usado quando a tag nao separa o funil (ex: CALCULADORA e leads com tag do DIARIO na V5) -> separa por campanha.
   # $leadSetColM/$leadSetColG: coluna do lead que e o CONJUNTO (adset), POR PLATAFORMA.
   #   Diario/seg/ter = utm_term(7) nos dois. 2-DIAS: Facebook usa utm_medium(5) (la o utm_term e o
   #   POSICIONAMENTO Reels/Stories); Google usa utm_term(7)="40-ANOS" (=AdGroup da query). Anuncio = utm_content(8) sempre.
@@ -314,7 +321,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   function CampOk($nm) {
     $n = CampNorm $nm
     if ($campMust -ne '' -and ($n -notlike "*$campMust*")) { return $false }
-    if ($campMustNot -ne '' -and ($n -like "*$campMustNot*")) { return $false }
+    if ($campMustNot -ne '') { foreach ($x in ($campMustNot -split ';')) { if ($x -ne '' -and ($n -like "*$x*")) { return $false } } }  # lista ';' -> exclui qualquer um
     return $true
   }
   Write-Host "== Funnel $key : downloading =="
@@ -405,7 +412,11 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   foreach ($r in $rows) {
     if ($r.Count -lt 10) { continue }
     $tag = $r[3]
-    if ($tagMode -eq 'contains') {                     # 2-DIAS: qualquer edicao (DOMINGO/SEGUNDA/TERCA)-2-DIAS na v6
+    if ($leadCampMust -ne '' -or $leadCampMustNot -ne '') {   # CALCULADORA: separa pela CAMPANHA (a tag e a mesma do diario)
+      $lc = CampNorm $r[6]
+      if ($leadCampMust -ne '' -and ($lc -notlike "*$leadCampMust*")) { continue }
+      if ($leadCampMustNot -ne '' -and ($lc -like "*$leadCampMustNot*")) { continue }
+    } elseif ($tagMode -eq 'contains') {               # 2-DIAS: qualquer edicao (DOMINGO/SEGUNDA/TERCA)-2-DIAS na v6
       if ($tag.IndexOf($tagPfx) -lt 0) { continue }
     } else {
       if (-not $tag.StartsWith($tagPfx)) { continue }
@@ -609,7 +620,7 @@ function Attribute-Sales($funnels) {
     #    Venda sem telefone (99% do FDI hoje) -> email basta. Assim o telefone vira double-check automatico.
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
-        if ($fn.key -ne 'diario' -and $fn.key -ne 'dias2') { continue }   # diario E 2-dias: regra estrita (email + telefone confirma)
+        if ($fn.key -ne 'diario' -and $fn.key -ne 'dias2' -and $fn.key -ne 'calc') { continue }   # diario, 2-dias E calc: regra estrita (email + telefone confirma)
         $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) {
           if ($c.d -gt $sd) { continue }
@@ -622,7 +633,7 @@ function Attribute-Sales($funnels) {
     # 2) SEG/TER — email
     if ($null -eq $best -and $ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
-        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2') { continue }
+        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2' -or $fn.key -eq 'calc') { continue }
         $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
@@ -631,7 +642,7 @@ function Attribute-Sales($funnels) {
     # 3) SEG/TER — telefone
     if ($null -eq $best -and $pk.Length -ge 8) {
       foreach ($fn in $funnels) {
-        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2') { continue }
+        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2' -or $fn.key -eq 'calc') { continue }
         $cands = $fn.phIndex[$pk]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
@@ -739,16 +750,19 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: query = campanhas que COMECAM com "WBN-DIARIO" (campMust) E NAO sao 2-dias (campMustNot).
 #   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
 #   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' $CAMP_2DIAS
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC" 7 7 '' '' $CAMP_CALC
 # 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 $dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_2DIAS '' 5 7 '2026-09-01'
-$salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I)
+# CALCULADORA: mesmas queries (campMust=CALCULADORA), leads V5 por campanha (leadCampMust); sem pesquisa (gPesq=$null, abcScore=$false).
+$calcI = Build-Funnel 'calc' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $null $QID_DIARIO $LID 'contains' $true $true $false $true $false $CAMP_CALC '' 5 7 '' $CAMP_CALC
+$salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I, $calcI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
 $dois2 = Finalize-Funnel $dois2I 0 $true  # 2-DIAS: captacao; dropLeadless=$true isola a campanha atual (v7) das velhas de agosto
+$calc = Finalize-Funnel $calcI 0 $true    # CALCULADORA: captacao; dropLeadless isola as campanhas CALCULADORA
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
@@ -917,6 +931,7 @@ $payload = @{
   terca         = FunnelPayload $ter
   diario        = FunnelPayload $dia
   dias2         = FunnelPayload $dois2
+  calc          = FunnelPayload $calc
   pesquisa      = @{
     surveyStart = $SURVEY_START
     dims        = @($pesqDims)

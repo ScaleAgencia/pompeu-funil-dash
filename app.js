@@ -4,6 +4,8 @@
   var D = window.POMPEU;
   if (!D || !window.POMPEU_OK) { document.getElementById('views').innerHTML = '<p class="empty">Dados indisponíveis. Aguarde a próxima atualização.</p>'; return; }
   var NM = D.names;
+  var FLABEL = { dias2: 'Webinar 2 Dias', calc: 'Calculadora' };   // nome de exibição por funil
+  var FICON = { dias2: '2D', calc: '🧮' };
   var arr = function (x) { return Array.isArray(x) ? x : (x == null ? [] : [x]); };
   var $ = function (s, r) { return (r || document).querySelector(s); };
 
@@ -310,7 +312,7 @@
     var a = agg(f, st.lo, st.hi);
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
-    var isDaily = key === 'diario' || key === 'dias2';
+    var isDaily = key === 'diario' || key === 'dias2' || key === 'calc';
     if (isDaily) {
       var hasScore = (f.respTot || 0) > 0;   // funil tem pesquisa/leadscore? (2-dias ainda nao)
       var sub = DSUB, dview;
@@ -319,11 +321,11 @@
           '<div class="section-title">ROAS projetado por campanha e anúncio <span class="st-line"></span></div>' + roasBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'roas') + optColDaily(f, 'm', st.lo, st.hi, 'roas') + '</div>';
       } else if (sub === 'perfil') {
-        dview = hasScore ? perfilDiario(f, st.lo, st.hi) : noScoreMsg();
+        dview = hasScore ? perfilDiario(f, st.lo, st.hi) : noScoreMsg(key);
       } else if (sub === 'acomp') {
-        dview = hasScore ? acompanhamento(f, st.lo, st.hi) : noScoreMsg();
+        dview = hasScore ? acompanhamento(f, st.lo, st.hi) : noScoreMsg(key);
       } else if (sub === 'resp') {
-        dview = taxaResposta(f, st.lo, st.hi);
+        dview = hasScore ? taxaResposta(f, st.lo, st.hi) : noScoreMsg(key);
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
       } else if (hasScore) {
@@ -331,7 +333,7 @@
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
       } else {
-        dview = capOptBanner() + chartsBlock(key) +
+        dview = capOptBanner(key) + chartsBlock(key) +
           '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM + CPL por dia (passe o mouse)</span><span class="st-line"></span></div>' +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'cpl') + optColDaily(f, 'm', st.lo, st.hi, 'cpl') + '</div>';
       }
@@ -368,7 +370,7 @@
       var rc = r == null ? 'var(--muted)' : (r >= 1 ? 'var(--teal)' : r >= 0.5 ? 'var(--gold)' : 'var(--red)');
       return '<tr><td class="lbl"><span class="dot ' + dot + '"></span>' + nm + '</td><td>' + fBRL0(sp) + '</td><td>' + fBRL0(rev) + '</td><td>' + fInt(sl) + '</td><td style="color:' + rc + ';font-weight:700">' + (r == null ? '—' : fRoas(r)) + '</td></tr>';
     }
-    return '<div class="section-title">Consolidado · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· ROAS e faturamento total (cruzamento e-mail + telefone)</span><span class="st-line"></span></div>' +
+    return '<div class="section-title">Consolidado · ' + (FLABEL[f.key] || '') + ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· ROAS e faturamento total (cruzamento e-mail + telefone)</span><span class="st-line"></span></div>' +
       dailyRoasStrip(a) +
       '<div class="receita-grid">' +
         card3('💵 Faturamento (FDI)', fBRL0(a.rev), '<span>atribuído por e-mail + WhatsApp</span>') +
@@ -381,7 +383,7 @@
         prow('Google Ads', 'g', a.gSp, a.gRev, a.gSl, gRoas) +
         '<tr class="tot">' + prow('Total', '', a.spend, a.rev, a.sales, a.roas).replace('<tr>', '').replace('</tr>', '') + '</tr>' +
       '</tbody></table></div>' +
-      '<div class="banner">🔎 <div>Faturamento e ROAS do funil 2 Dias inteiro (Meta + Google). Uma venda do FDI conta pro funil quando o <b>e-mail</b> do comprador bate num lead do 2-dias, e o <b>WhatsApp confirma</b> quando existir na venda (hoje ~99% das vendas do FDI vêm sem WhatsApp, então o e-mail sustenta; o telefone vira double-check automático conforme o checkout for preenchendo). Atualiza a cada 3h.</div></div>';
+      '<div class="banner">🔎 <div>Faturamento e ROAS deste funil inteiro (Meta + Google). Uma venda do FDI conta pro funil quando o <b>e-mail</b> do comprador bate num lead do funil, e o <b>WhatsApp confirma</b> quando existir na venda (hoje ~99% das vendas do FDI vêm sem WhatsApp, então o e-mail sustenta; o telefone vira double-check automático conforme o checkout for preenchendo). Atualiza a cada 3h.</div></div>';
   }
 
   function coverageBanner() {
@@ -406,7 +408,7 @@
     RESP_G = { dayArr: Object.keys(per.days).sort().map(function (k) { return per.days[k]; }) };
     var recv = 0; arr(f.survDaily).forEach(function (s) { if (s.date >= lo && s.date <= hi) recv += s.tot; });  // qtd bruta de respostas recebidas (por data da resposta)
     var noResp = per.ld - per.rs, rate = per.ld ? per.rs / per.ld : null;
-    var title = '<div class="section-title">Taxa de resposta da pesquisa · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· leads cadastrados × pesquisas respondidas</span><span class="st-line"></span></div>';
+    var title = '<div class="section-title">Taxa de resposta da pesquisa · ' + (FLABEL[f.key] || '') + ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· leads cadastrados × pesquisas respondidas</span><span class="st-line"></span></div>';
     if (per.ld <= 0) return title + '<div class="card"><div class="empty">Sem leads cadastrados no período selecionado.</div></div>';
     // KPIs
     var cards = '<div class="kpi-row">' +
@@ -566,7 +568,7 @@
     }
     var table = '<div class="section-title">🗓️ Semana a semana <span class="st-line"></span></div>' +
       '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Período</th><th>% Lead A</th><th>Custo/Lead A</th><th>Vol. Lead A</th><th>Leads</th><th>Compradores</th></tr></thead><tbody>' + wrows + '</tbody></table></div>';
-    return '<div class="section-title">Acompanhamento geral · Webinar 2 Dias <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· saúde da captação visando Lead A</span><span class="st-line"></span></div>' +
+    return '<div class="section-title">Acompanhamento geral · ' + (FLABEL[f.key] || '') + ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· saúde da captação visando Lead A</span><span class="st-line"></span></div>' +
       hero + cards + charts + table +
       '<div class="banner">🔎 <div>Esta aba responde <b>“a captação está melhorando ou piorando?”</b> olhando o que importa pra vender: <b>quanto Lead A</b> (o perfil que compra) você traz e <b>a que preço</b>. O veredito compara o período selecionado com o anterior de mesmo tamanho. Use o seletor de período no topo pra comparar ontem, 7 dias, semana passada, etc. Atualiza a cada 3h e recalcula a cada venda.</div></div>';
   }
@@ -919,13 +921,15 @@
   function roasBanner() {
     return '<div class="banner" style="margin-bottom:14px">↩️ <div>ROAS projetado por plataforma e anúncio — receita do FDI (cruzada por <b>e-mail</b>, com <b>WhatsApp confirmando</b> quando existir) ÷ investimento. Onde o anúncio já vendeu mostra o ROAS real; sem venda ainda mostra 🕐. <b>Meta com imposto ×1,1385; Google sem.</b> Recortes recentes sobem conforme as vendas maturam.</div></div>';
   }
-  // 2-DIAS (funil novo sem pesquisa ainda): otimização por CPL
-  function capOptBanner() {
-    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Funil de <b>captação</b> do Webinar 2 Dias — ainda <b>sem pesquisa/leadscore</b> (campanha nasceu em 21/08). Otimize por <b>CPL</b>: <b>Acelerar</b> quando o CPL é barato (≤ 0,8× a mediana) · <b>Revisar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Quando começar a cair venda, a coluna vira <b>ROAS</b> sozinha. Meta com imposto ×1,1385; Google sem.</div></div>';
+  // funil de captação sem pesquisa ainda: otimização por CPL
+  function capOptBanner(key) {
+    var nm = FLABEL[key] || 'Funil';
+    return '<div class="banner" style="margin-bottom:14px">🎯 <div>Funil de <b>captação</b> · <b>' + nm + '</b> — ainda <b>sem pesquisa/leadscore</b>. Otimize por <b>CPL</b>: <b>Acelerar</b> quando o CPL é barato (≤ 0,8× a mediana) · <b>Revisar</b> quando é caro (≥ 1,35×) · senão <b>Manter</b>. Quando começar a cair venda, a coluna vira <b>ROAS</b> sozinha. Meta com imposto ×1,1385; Google sem.</div></div>';
   }
-  function noScoreMsg() {
-    return '<div class="section-title">Perfil do lead · Webinar 2 Dias <span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:0">⏳ <div><b>Aguardando as respostas da pesquisa do Webinar 2 Dias.</b> Este funil é novíssimo (começou em 21/08) e ainda não tem uma aba de pesquisa vinculada. Assim que as respostas começarem a cair, o <b>leadscore A/B/C</b>, o <b>perfil</b>, as <b>pizzas de aderência ao comprador</b>, o <b>índice de conversão por resposta</b> e o <b>gráfico diário de qualidade</b> aparecem aqui automaticamente — a mesma máquina do Diário, sem eu precisar mexer. Por enquanto, use <b>🎯 Otimização</b> (por CPL) e <b>📊 Consolidado</b>. Quando tiver a aba da pesquisa, me manda que eu ligo em 1 minuto.</div></div>';
+  function noScoreMsg(key) {
+    var nm = FLABEL[key] || 'este funil';
+    return '<div class="section-title">Aguardando a pesquisa · ' + nm + ' <span class="st-line"></span></div>' +
+      '<div class="banner" style="margin-bottom:0">⏳ <div><b>Aguardando as respostas da pesquisa — ' + nm + '.</b> Este funil ainda não tem uma aba de pesquisa vinculada. Assim que as respostas começarem a cair, o <b>leadscore A/B/C</b>, o <b>perfil</b>, as <b>pizzas de aderência ao comprador</b>, o <b>índice de conversão por resposta</b>, a <b>taxa de resposta</b> e o <b>gráfico diário de qualidade</b> aparecem aqui automaticamente — a mesma máquina do 2-dias, sem eu precisar mexer. Por enquanto, use <b>🎯 Otimização</b> (por CPL) e <b>📊 Consolidado</b>. Quando tiver a aba da pesquisa, me manda que eu ligo em 1 minuto.</div></div>';
   }
   // strip de leadscore A/B/C do diario (no lugar do Frio/Morno/Quente)
   function abcStrip(a) {
@@ -958,7 +962,7 @@
     var dims = '<div class="section-title">O que os leads respondem <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">(barra colorida por A/B/C · índice de conversão por resposta, ao vivo)</span><span class="st-line"></span></div>' +
       '<div class="banner" style="margin-bottom:14px">📊 <div>O <b>índice de conversão</b> ao lado de cada resposta é o sinal real: <b style="color:var(--teal)">verde ≥ 1</b> converte acima da média, <b style="color:var(--red)">vermelho &lt; 1</b> abaixo. Recalculado a cada venda pelo cruzamento pesquisa × compradores. <b>Não confundir com peso de score</b> — a otimização usa as regras A/B/C, não soma de pontos. Ex.: aporte "até R$ 100" e "acima de R$ 2.000" aparecem com índice &lt; 1 (ruins) e <b>não contam pra Lead A</b>.</div></div>' +
       '<div class="dims-grid">' + PDK.map(function (dk) { return dimCardR(dk, dimLabel[dk] || dk, g.pdist[dk] || {}, RO[dk] || []); }).join('') + '</div>';
-    return '<div class="section-title">Perfil do lead · Webinar 2 Dias <span class="st-line"></span></div>' +
+    return '<div class="section-title">Perfil do lead · ' + (FLABEL[f.key] || '') + ' <span class="st-line"></span></div>' +
       utmFilterBar(Rp) + qual + cards + aderenciaPanel(g, RO) + abcRuler() + dims;
   }
   // ---- PIZZAS (donut) — comparação leads × comprador, estilo SIP ----
@@ -1592,7 +1596,7 @@
      ROUTER
   ===================================================================== */
   var mounted = {};
-  var CUR = 'dias2';   // dash agora e SO o funil 2-dias
+  var CUR = 'dias2';   // funil ativo (dias2 | calc) — trocado pelo seletor de funil no topo
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
@@ -1602,7 +1606,22 @@
     else renderFunnel(CUR);
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
+  function setBrand(fk) {
+    var bt = document.querySelector('.brand-title'); if (bt) bt.textContent = (FLABEL[fk] || '').toUpperCase();
+    var lm = document.querySelector('.logo-mark'); if (lm) lm.textContent = FICON[fk] || '';
+  }
+  function switchFunnel(fk) {
+    if (!D[fk] || fk === CUR) return;
+    CUR = fk;
+    Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fn-btn'), function (b) { b.classList.toggle('active', b.getAttribute('data-f') === fk); });
+    Array.prototype.forEach.call(document.querySelectorAll('#views .view'), function (v) { v.classList.toggle('active', v.id === 'view-' + fk); });
+    PF = { src: -1, med: -1, camp: -1, set: -1, ad: -1 };   // filtros de UTM são por funil
+    setBrand(fk);
+    if (!mounted[fk]) { mounted[fk] = true; mountFunnel(fk); } else renderFunnel(fk);
+    window.scrollTo(0, 0);
+  }
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fn-btn'), function (b) { b.addEventListener('click', function () { switchFunnel(b.getAttribute('data-f')); }); });
   window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });
 
   // header meta
