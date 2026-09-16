@@ -45,6 +45,13 @@ $G_PESQ_2DIAS   = 'pesquisa_diario_2_dias'  # aba de pesquisa do 2-dias (compart
 #   Leads na V5 (mesma aba do diario) com TAG do diario -> NAO da pra separar por tag; separa por utm_campaign=CALCULADORA.
 #   Sem pesquisa ainda -> captacao pura (CPL). Excluido do diario (campMustNot+leadCampMustNot) p/ atribuicao nao duplicar.
 $CAMP_CALC      = 'CALCULADORA'
+# --- LIVE YOUTUBE (funil novo 16/09; passa a ser O funil da dash — 2-dias/calc saem) ---
+#   Leads na aba v8, tag=WBN-2026-SEMANAL-22.09 mas separo por utm_campaign CONTEM YOUTUBE_LIVE (pega tb "... — Cópia").
+#   Queries nas MESMAS abas (Meta gid0, Google gid1609119011), campanha contendo YOUTUBE_LIVE.
+#   Pesquisa DEDICADA 'pesquisa_diario_22' (18 col padrao) -> leadscore A/B/C + CPL A + taxa de resposta.
+$G_LEADS_LIVE   = 'v8'
+$CAMP_LIVE      = 'YOUTUBELIVE'
+$G_PESQ_LIVE    = 'pesquisa_diario_22'
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -620,7 +627,7 @@ function Attribute-Sales($funnels) {
     #    Venda sem telefone (99% do FDI hoje) -> email basta. Assim o telefone vira double-check automatico.
     if ($ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
-        if ($fn.key -ne 'diario' -and $fn.key -ne 'dias2' -and $fn.key -ne 'calc') { continue }   # diario, 2-dias E calc: regra estrita (email + telefone confirma)
+        if ($fn.key -ne 'diario' -and $fn.key -ne 'live') { continue }   # diario E live: regra estrita (email + telefone confirma)
         $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) {
           if ($c.d -gt $sd) { continue }
@@ -633,7 +640,7 @@ function Attribute-Sales($funnels) {
     # 2) SEG/TER — email
     if ($null -eq $best -and $ek -ne '' -and $ek.IndexOf('@') -ge 0) {
       foreach ($fn in $funnels) {
-        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2' -or $fn.key -eq 'calc') { continue }
+        if ($fn.key -eq 'diario' -or $fn.key -eq 'live') { continue }
         $cands = $fn.emIndex[$ek]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
@@ -642,7 +649,7 @@ function Attribute-Sales($funnels) {
     # 3) SEG/TER — telefone
     if ($null -eq $best -and $pk.Length -ge 8) {
       foreach ($fn in $funnels) {
-        if ($fn.key -eq 'diario' -or $fn.key -eq 'dias2' -or $fn.key -eq 'calc') { continue }
+        if ($fn.key -eq 'diario' -or $fn.key -eq 'live') { continue }
         $cands = $fn.phIndex[$pk]; if ($null -eq $cands) { continue }
         foreach ($c in $cands) { if ($c.d -le $sd) { if ($null -eq $best -or $c.d -gt $best.d) { $best = $c } } }
       }
@@ -750,19 +757,17 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: query = campanhas que COMECAM com "WBN-DIARIO" (campMust) E NAO sao 2-dias (campMustNot).
 #   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
 #   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC" 7 7 '' '' $CAMP_CALC
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC;$CAMP_LIVE" 7 7 '' '' $CAMP_CALC
 # 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
-$dois2I = Build-Funnel 'dias2' $TAG_2DIAS $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_2DIAS $G_PESQ_2DIAS $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_2DIAS '' 5 7 '2026-09-01'
-# CALCULADORA: mesmas queries (campMust=CALCULADORA), leads V5 por campanha (leadCampMust); sem pesquisa (gPesq=$null, abcScore=$false).
-$calcI = Build-Funnel 'calc' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $null $QID_DIARIO $LID 'contains' $true $true $false $true $false $CAMP_CALC '' 5 7 '' $CAMP_CALC
-$salesInfo = Attribute-Sales @($segI, $terI, $diaI, $dois2I, $calcI)
+# LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE
+$salesInfo = Attribute-Sales @($segI, $terI, $diaI, $liveI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
-$dois2 = Finalize-Funnel $dois2I 0 $true  # 2-DIAS: captacao; dropLeadless=$true isola a campanha atual (v7) das velhas de agosto
-$calc = Finalize-Funnel $calcI 0 $true    # CALCULADORA: captacao; dropLeadless isola as campanhas CALCULADORA
+$live = Finalize-Funnel $liveI 0 $true  # LIVE YOUTUBE: dropLeadless isola as campanhas YOUTUBE_LIVE
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
@@ -914,7 +919,7 @@ function Compute-Validation($surveyFiles, $buyers, $matCut) {
 }
 $nowBR = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'E. South America Standard Time')
 $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
-$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv'), (Join-Path $dataDir 'dias2_pesq.csv')) $script:FDI_BUYERS $matCut
+$validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv'), (Join-Path $dataDir 'live_pesq.csv')) $script:FDI_BUYERS $matCut
 Write-Host ("   validacao: {0} leads maturados, {1} compradores | Quente {2}/{3} Morno {4}/{5} Frio {6}/{7}" -f $validation.leads, $validation.buyers, $validation.tier.q.b, $validation.tier.q.n, $validation.tier.m.b, $validation.tier.m.n, $validation.tier.f.b, $validation.tier.f.n)
 $payload = @{
   generatedAt   = (Get-Date).ToUniversalTime().ToString('o')
@@ -930,8 +935,7 @@ $payload = @{
   segunda       = FunnelPayload $seg
   terca         = FunnelPayload $ter
   diario        = FunnelPayload $dia
-  dias2         = FunnelPayload $dois2
-  calc          = FunnelPayload $calc
+  live          = FunnelPayload $live
   pesquisa      = @{
     surveyStart = $SURVEY_START
     dims        = @($pesqDims)

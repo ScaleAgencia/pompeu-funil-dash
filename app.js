@@ -4,8 +4,8 @@
   var D = window.POMPEU;
   if (!D || !window.POMPEU_OK) { document.getElementById('views').innerHTML = '<p class="empty">Dados indisponíveis. Aguarde a próxima atualização.</p>'; return; }
   var NM = D.names;
-  var FLABEL = { dias2: 'Webinar 2 Dias', calc: 'Calculadora' };   // nome de exibição por funil
-  var FICON = { dias2: '2D', calc: '🧮' };
+  var FLABEL = { live: 'Live YouTube' };   // nome de exibição por funil
+  var FICON = { live: '▶' };
   var arr = function (x) { return Array.isArray(x) ? x : (x == null ? [] : [x]); };
   var $ = function (s, r) { return (r || document).querySelector(s); };
 
@@ -312,7 +312,7 @@
     var a = agg(f, st.lo, st.hi);
     var body = $('#fbody-' + key);
     var showScore = st.hi >= D.surveyStart;
-    var isDaily = key === 'diario' || key === 'dias2' || key === 'calc';
+    var isDaily = key === 'diario' || key === 'live';
     if (isDaily) {
       var hasScore = (f.respTot || 0) > 0;   // funil tem pesquisa/leadscore? (2-dias ainda nao)
       var sub = DSUB, dview;
@@ -433,7 +433,7 @@
       '</div></div>';
     // por dia
     var daily = '<div class="section-title" style="margin-top:2px">📅 Por dia de cadastro <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· barra = leads do dia · verde = responderam · % no topo = taxa (passe o mouse)</span><span class="st-line"></span></div>' +
-      '<div class="chart-card"><div class="chart-head"><h4>Cadastrados × responderam por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>Responderam</span><span><i style="background:var(--line2)"></i>Não responderam</span></div></div><div id="ch-resp-' + f.key + '"></div><div class="chart-foot">Cada lead é contado no seu dia de cadastro; a fatia verde é quem já respondeu a pesquisa. Só contam respostas a partir de ' + dfull('2026-09-01') + '.</div></div>';
+      '<div class="chart-card"><div class="chart-head"><h4>Cadastrados × responderam por dia</h4><div class="legend"><span><i style="background:var(--teal)"></i>Responderam</span><span><i style="background:var(--line2)"></i>Não responderam</span></div></div><div id="ch-resp-' + f.key + '"></div><div class="chart-foot">Cada lead é contado no seu dia de cadastro; a fatia verde é quem já respondeu a pesquisa.</div></div>';
     // por plataforma
     function rrow(nm, dot, ld, rs, cls) {
       var nr = ld - rs, tx = ld ? rs / ld : null;
@@ -460,7 +460,7 @@
     var campTbl = '<div class="section-title">Por campanha <span class="st-line"></span></div>' +
       '<div class="card tbl-card"><table class="vtbl"><thead><tr><th style="text-align:left">Campanha</th><th>Cadastrados</th><th>Responderam</th><th>Não resp.</th><th>Taxa</th></tr></thead><tbody>' +
       (crows || '<tr><td class="lbl" colspan="5">Sem campanhas no período.</td></tr>') + '</tbody></table></div>';
-    var banner = '<div class="banner">🔎 <div><b>Taxa de resposta</b> = leads que responderam a pesquisa ÷ leads cadastrados, no período selecionado (filtre lá em cima). Cada lead conta <b>uma vez</b> — quem respondeu mais de uma vez não é contado em dobro (por isso “responderam” pode ser menor que “respostas recebidas”). As respostas são casadas ao lead por <b>e-mail/telefone</b> e só contam <b>a partir de ' + dfull('2026-09-01') + '</b> (cohort do Webinar 2 Dias). Atualiza a cada 3h.</div></div>';
+    var banner = '<div class="banner">🔎 <div><b>Taxa de resposta</b> = leads que responderam a pesquisa ÷ leads cadastrados, no período selecionado (filtre lá em cima). Cada lead conta <b>uma vez</b> — quem respondeu mais de uma vez não é contado em dobro (por isso “responderam” pode ser menor que “respostas recebidas”). As respostas são casadas ao lead por <b>e-mail/telefone</b> (pesquisa <b>' + (FLABEL[f.key] || '') + '</b>). Atualiza a cada 3h.</div></div>';
     return title + cards + bar + daily + platTbl + campTbl + banner;
   }
   function respRateDaily(host, days) {
@@ -1026,13 +1026,13 @@
     var macroBlock = '<div class="macro"><div class="macro-gauge">' + pieSvg([macro, 100 - macro], [adColor(macro), 'var(--panel3)'], 154, ['aderência', '']) +
       '<div class="mg-c"><span class="mg-v" style="color:' + adColor(macro) + '">' + Math.round(macro) + '%</span><span class="mg-l">aderência</span></div></div>' +
       '<div class="macro-txt"><div class="macro-big" style="color:' + adColor(macro) + '">' + verd + '</div>' +
-      '<div class="macro-sub">O quanto o mix de leads do 2-dias se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
+      '<div class="macro-sub">O quanto o mix de leads deste funil se parece com <b>quem realmente comprou o FDI</b> — média das 8 perguntas. 100% = idêntico ao comprador. Recalcula a cada venda.</div>' +
       '<div class="macro-a"><div class="ma-lab">% de <b class="cA">Lead A</b> (o perfil que mais compra)</div>' +
         '<div class="ma-row"><span>Leads (filtro)</span><div class="ma-tr"><i style="width:' + Math.min(100, aNow).toFixed(1) + '%"></i></div><b>' + aNow.toFixed(1).replace('.', ',') + '%</b></div>' +
         '<div class="ma-row"><span>Comprador FDI</span><div class="ma-tr"><i class="buy" style="width:' + Math.min(100, aBuy).toFixed(1) + '%"></i></div><b>' + aBuy.toFixed(1).replace('.', ',') + '%</b></div>' +
       '</div></div></div>';
     return '<div class="section-title" style="margin-top:6px">✅ Aderência ao comprador do FDI <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· atualiza a cada venda</span><span class="st-line"></span></div>' +
-      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o <b>mix dos leads do 2-dias</b> com o de <b>quem realmente compra</b>, pergunta a pergunta.</div></div>' +
+      '<div class="banner" style="margin-bottom:14px">🔄 <div>Recalculado sozinho <b>toda vez que cai venda</b> do FDI (cruzamento e-mail + telefone). Base: <b>' + fInt(v.leads) + '</b> respostas já maturadas × <b>' + fInt(v.buyers) + '</b> compradores. Compara o <b>mix dos leads deste funil</b> com o de <b>quem realmente compra</b>, pergunta a pergunta.</div></div>' +
       '<div class="kpi-row">' +
         convCard('🟢 Lead A converte', A, 'var(--teal)') +
         convCard('🟡 Lead B converte', B, 'var(--gold)') +
@@ -1596,7 +1596,7 @@
      ROUTER
   ===================================================================== */
   var mounted = {};
-  var CUR = 'dias2';   // funil ativo (dias2 | calc) — trocado pelo seletor de funil no topo
+  var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1 };
     if (!subs[tab]) tab = 'otim';
