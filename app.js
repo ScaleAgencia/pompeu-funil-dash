@@ -830,6 +830,7 @@
   ===================================================================== */
   var MED_CPL_D = null;      // mediana do CPL do funil diario (p/ colorir + tags)
   var MED_CPLA = null;       // mediana do Custo por Lead A (diario, modo abc) — base das cores/tags
+  var MED_CONV_D = null;     // mediana da conversao de pagina da coluna (p/ colorir; por plataforma)
   var DAILY_SALES = false;   // o funil diario ja tem venda atribuida?
   var DMODE = 'abc';         // modo da coluna de otimizacao do diario: 'abc' (leadscore) | 'roas'
   function abcScored(n) { return (n.la || 0) + (n.lb || 0) + (n.lc || 0); }
@@ -1174,6 +1175,15 @@
       '<div class="dr-item"><div class="dr-l">Conv. lead→venda</div><div class="dr-v">' + fPct(conv, 2) + '</div></div>' +
       '</div></div>';
   }
+  // conversão de página por nó: Meta = leads ÷ Landing Page Views; Google = leads ÷ cliques (não há LPV na query do Google)
+  function convNode(n, plat) { var base = plat === 'g' ? n.ck : n.lp; return (base && base > 0) ? n.ld / base : null; }
+  function convColor(v, med) { if (v == null || !med) return 'var(--muted)'; var r = v / med; if (r >= 1.15) return 'var(--teal)'; if (r <= 0.7) return 'var(--red)'; return 'var(--gold)'; }
+  function convPagCell(n, plat) {
+    var v = convNode(n, plat);
+    var sub = plat === 'g' ? (fInt(n.ck || 0) + ' cliques') : (fInt(n.lp || 0) + ' LPV');
+    var lbl = plat === 'g' ? 'conv. clique→lead (leads ÷ cliques)' : 'conv. de página (leads ÷ LPV)';
+    return '<div class="tr-num" title="' + lbl + ' · ' + sub + '"><span class="conv-pill" style="color:' + convColor(v, MED_CONV_D) + '">' + (v == null ? '—' : fPct(v, 0)) + '</span></div>';
+  }
   function treeRowsDaily(n, fk, plat, parentPath) {
     var path = parentPath + '¦' + n.name;
     var skey = fk + '_' + plat;
@@ -1201,6 +1211,7 @@
       '<div class="tr-num">' + fBRL0(n.sp) + '</div>' +
       '<div class="tr-num muted">' + fInt(n.ld) + '</div>' +
       '<div class="tr-num"><span class="cpl-pill" style="color:' + cplc + '">' + (n.cpl == null ? '—' : fBRL(n.cpl)) + '</span></div>' +
+      convPagCell(n, plat) +
       cell5 +
       (DMODE === 'abc' ? cplSparkCell(n) : '') +   // no modo leadscore, mantem tb o sparkline de CPL/dia
       '<div class="tr-num acao">' + (tag ? '<span class="tag ' + tag.c + '">' + tag.t + '</span>' : '<span class="muted">—</span>') +
@@ -1221,6 +1232,7 @@
     DAILY_SALES = tot.sales > 0;
     MED_CPL_D = median(withSp.filter(function (n) { return n.cpl != null && n.ld >= 5; }).map(function (n) { return n.cpl; }));
     MED_CPLA = median(withSp.filter(function (n) { return cplA(n) != null && n.la >= 2; }).map(function (n) { return cplA(n); }));
+    MED_CONV_D = median(withSp.filter(function (n) { return convNode(n, plat) != null && n.ld >= 5; }).map(function (n) { return convNode(n, plat); }));
     var cpl = tot.ld ? tot.sp / tot.ld : null;
     var roas = tot.sp ? tot.rev / tot.sp : null;
     var sTot = tot.la + tot.lb + tot.lc;
@@ -1268,6 +1280,7 @@
       sHead(sortKey, so, 'sp', 'Invest.', 'tr-num') +
       sHead(sortKey, so, 'ld', 'Leads', 'tr-num') +
       sHead(sortKey, so, 'cpl', 'CPL', 'tr-num') +
+      '<div class="tr-num" title="Conversão de página · ' + (isG ? 'Google: leads ÷ cliques' : 'Meta: leads ÷ LPV') + '">📄 Conv. pág</div>' +
       head5 + spkHead +
       sHead(sortKey, so, 'acao', 'Ação', 'tr-num');
     return '<div class="opt-col ' + plat + '">' +
