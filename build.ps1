@@ -763,6 +763,15 @@ $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
 $liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE
+# OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
+#   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
+#   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
+$LIVE_OV = @{ '2026-09-21' = 470.56 }
+foreach ($ovDay in $LIVE_OV.Keys) {
+  $s = 0.0; foreach ($n in $liveI.grain.Values) { if ($n.d -eq $ovDay) { $s += $n.sp } }
+  if ($s -gt 0) { $kf = $LIVE_OV[$ovDay] / $s; foreach ($n in $liveI.grain.Values) { if ($n.d -eq $ovDay) { $n.sp = $n.sp * $kf } }
+    Write-Host ("   [override] live ${ovDay}: gasto R$ {0:n2} -> R$ {1:n2} (fator {2:n4})" -f $s, $LIVE_OV[$ovDay], $kf) }
+}
 $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $liveI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
