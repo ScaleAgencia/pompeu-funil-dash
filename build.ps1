@@ -776,7 +776,7 @@ $salesInfo = Attribute-Sales @($segI, $terI, $diaI, $liveI)
 $seg = Finalize-Funnel $segI 1   # webinario na SEGUNDA -> ciclo segunda..domingo
 $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
-$live = Finalize-Funnel $liveI 0 $true  # LIVE YOUTUBE: dropLeadless isola as campanhas YOUTUBE_LIVE
+$live = Finalize-Funnel $liveI 0 $false  # LIVE YOUTUBE: SEM dropLeadless — campMust=YOUTUBELIVE ja isola; dropLeadless escondia gasto de campanhas Google (teste) que gastam mas ainda sem lead atribuido
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
