@@ -960,4 +960,16 @@ $js = "window.POMPEU = $json;`nwindow.POMPEU_OK = true;"
 $outFile = Join-Path $root 'data.js'
 [System.IO.File]::WriteAllText($outFile, $js, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Wrote $outFile ($([Math]::Round((Get-Item $outFile).Length/1kb,1)) KB)"
+
+# ---- cache-bust do data.js: carimba a versao do build no <script src="data.js?t=..."> do index.html ----
+#   Sem isso o browser segura o data.js cacheado (token estatico) e nao mostra dados novos (ex: gasto Google que
+#   passou a existir depois). A cada build o token muda -> o browser sempre baixa o data.js fresco. app.js/styles.css
+#   ficam com token manual (so mudam quando eu edito o codigo).
+$idxFile = Join-Path $root 'index.html'
+if (Test-Path $idxFile) {
+  $stamp = $nowBR.ToString('yyyyMMddHHmm')
+  $idx = [System.IO.File]::ReadAllText($idxFile, [Text.Encoding]::UTF8)
+  $idx2 = [Text.RegularExpressions.Regex]::Replace($idx, 'data\.js\?t=[^"'']*', "data.js?t=$stamp")
+  if ($idx2 -ne $idx) { [System.IO.File]::WriteAllText($idxFile, $idx2, (New-Object System.Text.UTF8Encoding($false))); Write-Host "   index.html data.js token -> $stamp" }
+}
 Write-Host "DONE $($payload.generatedAtBR)"
