@@ -319,7 +319,9 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false) {
+  # $dedupEmail: remove leads com email REPETIDO (mantem so o 1o de cada email no funil) -> conta lead real,
+  #   nao infla CPL/conversao de pagina. Vale Google+Meta juntos (dedup e por funil).
   # $googUnifyCamp: se setado, TODA campanha do GOOGLE (query e lead) que passa no campMust/leadCampMust vira
   #   este nome unico (colapsa variacoes com UTM quebrada num balde so). Conjunto/anuncio preservados. So Google.
   # $leadCampMust/$leadCampMustNot: filtra o LEAD pela utm_campaign (normalizada), nao pela tag.
@@ -415,6 +417,8 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   # INLINED hot loop (no per-lead function calls) -> processes ~130k rows fast.
   $rows = Read-Rows $fLead
   $emIndex = @{}   # emailKey -> ArrayList of leadObj (this funnel)
+  $seenEm = New-Object 'System.Collections.Generic.HashSet[string]'   # dedup por email ($dedupEmail): guarda o 1o de cada email
+  $dupEm = 0
   $phIndex = @{}
   $nmIndex = @{}   # nomeKey -> ArrayList of leadObj (so quando $buildNameIdx; usado no fallback de atribuicao)
   $edLeads = @{}   # tag -> lead count (edicao/semana)
@@ -441,6 +445,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       }                                                 # tagMode 'exact' (DIARIO): basta o StartsWith
     }
     $em = $r[1]; if ($em.IndexOf('@') -lt 0) { continue }
+    if ($dedupEmail) { $ek0 = $em.Trim().ToLowerInvariant(); if (-not $seenEm.Add($ek0)) { $dupEm++; continue } }   # email ja visto neste funil -> pula o duplicado (mantem so o 1o)
     $ts = $r[9]
     $ok = ($ts.Length -ge 10 -and $ts[2] -eq '/' -and $ts[5] -eq '/')
     if (-not $ok -and $r.Count -gt 10) { $ts = $r[10]; $ok = ($ts.Length -ge 10 -and $ts[2] -eq '/' -and $ts[5] -eq '/') }  # fallback: 'Data Ajustada' (segunda)
@@ -478,7 +483,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($buildNameIdx) { $nk = NKey $r[0]; if ($nk -ne '') { $na = $nmIndex[$nk]; if ($null -eq $na) { $na = New-Object System.Collections.ArrayList; $nmIndex[$nk] = $na }; [void]$na.Add($lead) } }
     if ($phk -ne '') { $pa = $phIndex[$phk]; if ($null -eq $pa) { $pa = New-Object System.Collections.ArrayList; $phIndex[$phk] = $pa }; [void]$pa.Add($lead) }
   }
-  Write-Host ("   [{0:n1}s] leads(tagged) $key = $totalLeads" -f $T.Elapsed.TotalSeconds)
+  Write-Host ("   [{0:n1}s] leads(tagged) $key = $totalLeads$(if($dedupEmail){" (dedup email: -$dupEm duplicados removidos)"})" -f $T.Elapsed.TotalSeconds)
 
   # ---- PESQUISA : score each, match to a lead, attribute to its grain node
   # cols: Nome,Email,WhatsApp,Idade,Nivel,Valor,Trava,Result,Renda,Cap,Motiv,utm...(12-16),Status,Data
@@ -770,7 +775,7 @@ $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
-$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true
 # OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
 #   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
 #   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
