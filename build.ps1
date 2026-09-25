@@ -51,6 +51,11 @@ $CAMP_CALC      = 'CALCULADORA'
 #   Pesquisa DEDICADA 'pesquisa_diario_22' (18 col padrao) -> leadscore A/B/C + CPL A + taxa de resposta.
 $G_LEADS_LIVE   = 'v8'
 $CAMP_LIVE      = 'YOUTUBELIVE'
+# UNIFICACAO GOOGLE (25/09): cliente subiu campanha com nome certo mas UTM errada (gasto numa campanha,
+#   lead taggeado noutra) -> anomalia de lead sem gasto. Pausaram as demais. Fix: TODO o Google youtube_live
+#   (queries+leads) e atribuido a ESTA campanha unica, entao CPL/ROAS fecham num balde so. Conjunto/anuncio
+#   sao preservados. Campanhas Google NOVAS (futuras, UTM certa) -> adicionar exclusao aqui qdo subirem.
+$CAMP_LIVE_GOOG_UNIFY = 'WBN-DIARIO_2026_E0-ONG_ALL_P4-FRIO_YT_18-09-2026_40_ANOS_YOUTUBE_LIVE_TESTE_HASHES_LP19_GOOGLE_2'
 $G_PESQ_LIVE    = 'pesquisa_diario_22'
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -314,7 +319,9 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '') {
+  # $googUnifyCamp: se setado, TODA campanha do GOOGLE (query e lead) que passa no campMust/leadCampMust vira
+  #   este nome unico (colapsa variacoes com UTM quebrada num balde so). Conjunto/anuncio preservados. So Google.
   # $leadCampMust/$leadCampMustNot: filtra o LEAD pela utm_campaign (normalizada), nao pela tag.
   #   Usado quando a tag nao separa o funil (ex: CALCULADORA e leads com tag do DIARIO na V5) -> separa por campanha.
   # $leadSetColM/$leadSetColG: coluna do lead que e o CONJUNTO (adset), POR PLATAFORMA.
@@ -391,6 +398,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       if ($r.Count -lt 5) { continue }
       $d = DKey $r[0]; if ($d -eq '') { continue }
       $cnm = QN $r[$gCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }
+      if ($googUnifyCamp -ne '') { $cnm = $googUnifyCamp }   # unifica gasto do google numa campanha so
       $ci = Intern $CampArr $CampMap $cnm
       $si = Intern $SetArr  $SetMap  (QN $r[$gSetCol] $decodeUtm)
       $ai = Intern $AdArr   $AdMap   (QN $r[$gAdCol]  $decodeUtm)
@@ -446,7 +454,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($p -eq 'o') {
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
-      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
+      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($googUnifyCamp -ne '' -and $p -eq 'g') { $cv = $googUnifyCamp }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
       $setCol = if ($p -eq 'g') { $leadSetColG } else { $leadSetColM }   # conjunto por plataforma (2-dias: FB=medium, Google=term)
       $sv = $r[$setCol]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
       $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = if ($decodeUtm) { Canon $av } else { $av.Trim() }; if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
@@ -762,7 +770,7 @@ $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
-$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY
 # OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
 #   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
 #   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
