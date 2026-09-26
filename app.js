@@ -296,6 +296,7 @@
   function renderFunnel(key) {
     var f = D[key], st = STATE[key];
     var pb = $('#pb-' + key);
+    if (pb) pb.style.display = (DSUB === 'v2') ? 'none' : '';   // V2 tem seu próprio seletor de período (o atributo hidden não vence o display:flex do CSS)
     Array.prototype.forEach.call(pb.querySelectorAll('.preset'), function (b) { b.classList.toggle('active', b.getAttribute('data-p') === st.preset); });
     $('#dl-' + key).value = st.lo; $('#dh-' + key).value = st.hi;
     var edBtn = $('#edbtn-' + key);
@@ -328,6 +329,8 @@
         dview = hasScore ? taxaResposta(f, st.lo, st.hi) : noScoreMsg(key);
       } else if (sub === 'consol') {
         dview = consolidado(f, a);
+      } else if (sub === 'v2') {
+        dview = v2Skeleton();
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
@@ -339,7 +342,8 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+      if (sub === 'v2') mountV2();
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
       if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
@@ -1606,12 +1610,169 @@
   function roasCell(r) { if (r == null) return '—'; var c = r >= 1.5 ? 'var(--teal)' : r >= 1 ? 'var(--gold)' : 'var(--red)'; return '<b style="color:' + c + '">' + fRoas(r) + '</b>'; }
 
   /* =====================================================================
+     ⚡ OTIMIZAÇÃO V2 — 100% filtrável (padrão MPI/SIP, métricas de captação)
+     Clicar em qualquer campanha/conjunto/anúncio filtra a aba inteira (KPIs +
+     gráficos) só pra ele, mas as listas continuam TODAS visíveis (sem drill
+     destrutivo). Cada nível: TABELA + gráfico por dia logo abaixo, com hover.
+  ===================================================================== */
+  var v2Sel = { camp: null, adset: null, ad: null }, v2Period = 'tudo', v2LineMetric = 'cpl';
+  var V2PAL = ['#34e5b0', '#57e6ff', '#a78bfa', '#ffce5c', '#ff6183', '#5e9bff', '#f472c0', '#2fd8a6', '#c084fc', '#fb923c'];
+  var V2LM = [{ k: 'cpl', l: 'CPL' }, { k: 'cpla', l: 'CPL A' }, { k: 'leads', l: 'Leads' }, { k: 'lda', l: 'Lead A' }, { k: 'conv', l: 'Conv. pág' }];
+  var V2PW = [{ k: '7d', l: '7 dias' }, { k: '14d', l: '14 dias' }, { k: '30d', l: '30 dias' }, { k: 'tudo', l: 'Tudo' }];
+  function v2Fun() { return D[CUR]; }
+  function v2Rows() { return arr(v2Fun().grain).map(function (g) { return { date: g.d, plat: g.p, campaign: NM.c[g.c], adset: NM.s[g.s], ad: NM.a[g.a], sp: g.sp, im: g.im || 0, ck: g.ck || 0, lp: g.lp || 0, ld: g.ld || 0, la: g.la || 0, lb: g.lb || 0, lc: g.lc || 0, rev: g.rev || 0, sales: g.sales || 0 }; }); }
+  function v2Range() { var r = funnelRange(v2Fun()), hi = r.hi, lo = r.lo; var back = v2Period === '7d' ? -6 : (v2Period === '14d' ? -13 : (v2Period === '30d' ? -29 : null)); if (back != null) { var l2 = addDays(hi, back); if (l2 > lo) lo = l2; } return { lo: lo, hi: hi }; }
+  function v2NewNode(name, key) { return { name: name, key: key, camp: '', adset: '', ad: '', sp: 0, im: 0, ck: 0, lp: 0, ld: 0, la: 0, lb: 0, lc: 0, rev: 0, sales: 0, mSp: 0, gSp: 0, mLd: 0, gLd: 0, mLp: 0, gCk: 0, plat: '', rows: [] }; }
+  function v2Accum(o, r) { o.sp += r.sp; o.im += r.im; o.ck += r.ck; o.lp += r.lp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.rev += r.rev; o.sales += r.sales; if (r.plat === 'm') { o.mSp += r.sp; o.mLd += r.ld; o.mLp += r.lp; } else if (r.plat === 'g') { o.gSp += r.sp; o.gLd += r.ld; o.gCk += r.ck; } if (!o.plat) o.plat = r.plat; else if (o.plat !== r.plat) o.plat = 'x'; o.rows.push(r); }
+  function v2M(o) { var sc = o.la + o.lb + o.lc, estA = sc ? o.ld * (o.la / sc) : 0; return { spend: o.sp, leads: o.ld, la: o.la, sales: o.sales, rev: o.rev, cpl: o.ld ? o.sp / o.ld : null, mCpl: o.mLd ? o.mSp / o.mLd : null, gCpl: o.gLd ? o.gSp / o.gLd : null, estA: estA, cplA: estA > 0 ? o.sp / estA : null, aPct: sc ? o.la / sc : null, convM: o.mLp ? o.mLd / o.mLp : null, convG: o.gCk ? o.gLd / o.gCk : null, ctr: o.im ? o.ck / o.im : null, cpm: o.im ? o.sp / (o.im / 1000) : null, roas: o.sp ? o.rev / o.sp : null, plat: o.plat }; }
+  function v2GroupBy(rows, level) { var g = {}; rows.forEach(function (r) { var key = level === 0 ? r.campaign : (level === 1 ? r.campaign + '\u0001' + r.adset : r.campaign + '\u0001' + r.adset + '\u0001' + r.ad); var o = g[key]; if (!o) { o = g[key] = v2NewNode(level === 0 ? r.campaign : (level === 1 ? r.adset : r.ad), key); o.camp = r.campaign; o.adset = r.adset; o.ad = r.ad; } v2Accum(o, r); }); return Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, b) { return b.sp - a.sp; }); }
+  function v2SelOf(o, level) { return level === 0 ? (v2Sel.camp === o.camp) : (level === 1 ? (v2Sel.camp === o.camp && v2Sel.adset === o.adset) : (v2Sel.camp === o.camp && v2Sel.adset === o.adset && v2Sel.ad === o.ad)); }
+  function v2Pick(level, o) { if (level === 0) { v2Sel = (v2Sel.camp === o.camp) ? { camp: null, adset: null, ad: null } : { camp: o.camp, adset: null, ad: null }; } else if (level === 1) { var s1 = (v2Sel.camp === o.camp && v2Sel.adset === o.adset); v2Sel = s1 ? { camp: o.camp, adset: null, ad: null } : { camp: o.camp, adset: o.adset, ad: null }; } else { var s2 = (v2Sel.camp === o.camp && v2Sel.adset === o.adset && v2Sel.ad === o.ad); v2Sel = s2 ? { camp: o.camp, adset: o.adset, ad: null } : { camp: o.camp, adset: o.adset, ad: o.ad }; } mountV2(); }
+  function v2LineVal(d) { var sc = d.la + d.lb + d.lc; if (v2LineMetric === 'leads') return d.ld > 0 ? d.ld : null; if (v2LineMetric === 'lda') { var e = sc ? d.ld * (d.la / sc) : 0; return e > 0 ? e : null; } if (!(d.sp > 0)) return null; if (v2LineMetric === 'cpl') return d.ld > 0 ? d.sp / d.ld : null; if (v2LineMetric === 'cpla') { var e2 = sc ? d.ld * (d.la / sc) : 0; return e2 > 0 ? d.sp / e2 : null; } if (v2LineMetric === 'conv') return d.lp > 0 ? d.ld / d.lp : (d.ck > 0 ? d.ld / d.ck : null); return null; }
+  function v2LineFmt(v) { if (v == null) return '—'; if (v2LineMetric === 'leads') return fInt(v); if (v2LineMetric === 'lda') return (Math.round(v * 10) / 10).toString().replace('.', ','); if (v2LineMetric === 'conv') return fPct(v, 0); return money(v); }
+  function v2AxisFmt(v) { if (v2LineMetric === 'leads' || v2LineMetric === 'lda') return fInt(Math.round(v)); if (v2LineMetric === 'conv') return fPct(v, 0); return fBRL0(v); }
+  function v2MetricLabel() { var x = V2LM.filter(function (m) { return m.k === v2LineMetric; })[0]; return x ? x.l : ''; }
+  function v2SeriesByDate(rows, hi) { var bd = {}; rows.forEach(function (r) { if (r.date === hi) return; var o = bd[r.date] || (bd[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); var ks = Object.keys(bd).sort(); return ks.map(function (d) { return bd[d]; }); }
+  function v2Ticks(dates) { var n = dates.length, step = Math.max(1, Math.ceil(n / 8)), out = []; for (var i = 0; i < n; i += step) out.push(i); if (n && out[out.length - 1] !== n - 1) out.push(n - 1); return out; }
+  function v2Kpis(o) {
+    var m = v2M(o);
+    return '<div class="kpi-row">' +
+      '<div class="card kpi hero"><div class="klabel">💰 Investimento</div><div class="kval">' + fBRL0(m.spend) + '</div><div class="ksub"><span>CPL <span class="kv">' + money(m.cpl) + '</span></span><span>' + fInt(m.leads) + ' leads</span></div></div>' +
+      card3('👥 Leads captados', fInt(m.leads), '<span>conv. página <span class="kv">' + (m.convM != null ? fPct(m.convM) : '—') + '</span></span><span>CTR ' + (m.ctr != null ? fPct(m.ctr) : '—') + '</span>') +
+      card3('🎯 CPL', money(m.cpl), '<span>M <span class="kv">' + money(m.mCpl) + '</span></span><span>G <span class="kv">' + money(m.gCpl) + '</span></span>') +
+      card3('🟢 Lead A', fInt(Math.round(m.estA)) + (m.aPct != null ? ' · ' + fPct(m.aPct, 0) : ''), '<span>CPL A <span class="kv">' + money(m.cplA) + '</span></span>') +
+      card3('📄 Conversão de página', (m.convM != null ? fPct(m.convM) : '—'), '<span>Meta LPV ' + (m.convM != null ? fPct(m.convM) : '—') + '</span><span>Google cliques ' + (m.convG != null ? fPct(m.convG) : '—') + '</span>') +
+      card3('↩️ ROAS', (m.roas != null ? fRoas(m.roas) : '—'), '<span>' + fInt(m.sales) + ' vendas</span><span>' + fBRL0(m.rev) + ' receita</span>') +
+      '</div>';
+  }
+  function v2ConvRow(m) { return m.plat === 'g' ? m.convG : m.convM; }
+  function v2Table(elId, title, hint, list, level) {
+    var host = document.getElementById(elId); if (!host) return;
+    if (!list.length) { host.innerHTML = '<div class="card"><div class="klabel">' + title + '</div><div class="empty">Sem dados no período.</div></div>'; return; }
+    var shown = list.slice(0, 80);
+    var medCplA = median(shown.map(function (o) { return v2M(o).cplA; }).filter(function (x) { return x != null; }));
+    var lvlLab = ['Campanha', 'Conjunto / Grupo', 'Anúncio'][level];
+    var head = '<thead><tr><th class="l">' + lvlLab + '</th><th>Gasto</th><th>Leads</th><th>CPL</th><th>Conv. pág.</th><th>Lead A</th><th>CPL A</th><th>ROAS</th></tr></thead>';
+    var body = shown.map(function (o) {
+      var m = v2M(o), sel = v2SelOf(o, level), cv = v2ConvRow(m);
+      var cplaCell = m.cplA != null ? '<span class="v2pill" style="color:' + cplColor(m.cplA, medCplA) + '">' + money(m.cplA) + '</span>' : '—';
+      var roasCell = m.roas != null && o.sales > 0 ? '<span class="v2pill" style="color:' + roasColor(m.roas) + '">' + fRoas(m.roas) + '</span>' : '<span class="muted">—</span>';
+      return '<tr class="v2row' + (sel ? ' sel' : '') + '" data-key="' + encodeURIComponent(o.key) + '">' +
+        '<td class="l"><span class="dot ' + (o.plat === 'g' ? 'g' : (o.plat === 'm' ? 'm' : '')) + '"></span><span class="v2name" title="' + esc(o.name) + '">' + (sel ? '● ' : '') + esc(pretty(o.name)) + '</span></td>' +
+        '<td>' + fBRL0(o.sp) + '</td><td>' + fInt(o.ld) + '</td><td>' + money(m.cpl) + '</td>' +
+        '<td>' + (cv != null ? fPct(cv, 0) : '—') + '</td><td>' + fInt(Math.round(m.estA)) + '</td><td>' + cplaCell + '</td><td>' + roasCell + '</td></tr>';
+    }).join('');
+    var more = list.length > shown.length ? ' <span class="v2hint">· top ' + shown.length + ' de ' + list.length + ' por gasto</span>' : '';
+    host.innerHTML = '<div class="card tbl-card"><div class="klabel" style="margin-bottom:8px">' + title + ' <span class="v2hint">' + hint + '</span>' + more + '</div><div class="tbl-scroll"><table class="vtbl v2tbl">' + head + '<tbody>' + body + '</tbody></table></div></div>';
+    var byKey = {}; shown.forEach(function (o) { byKey[o.key] = o; });
+    Array.prototype.forEach.call(host.querySelectorAll('.v2row'), function (tr) { tr.addEventListener('click', function () { var o = byKey[decodeURIComponent(tr.getAttribute('data-key'))]; if (o) v2Pick(level, o); }); });
+  }
+  function v2Lines(groups, elId, level) {
+    var host = document.getElementById(elId); if (!host) return;
+    var hi = v2Range().hi, top = groups.slice(0, 8);
+    top.forEach(function (g) { g.series = v2SeriesByDate(g.rows, hi); var mp = {}; g.series.forEach(function (d) { mp[d.date] = d; }); g.map = mp; });
+    var dset = {}; top.forEach(function (g) { g.series.forEach(function (d) { if (v2LineVal(d) != null) dset[d.date] = 1; }); });
+    var dates = Object.keys(dset).sort();
+    if (!dates.length) { host.innerHTML = '<div class="empty">Sem dados no período p/ traçar as linhas (exclui hoje, parcial).</div>'; return; }
+    var maxV = 0; top.forEach(function (g) { g.series.forEach(function (d) { var v = v2LineVal(d); if (v != null && v > maxV) maxV = v; }); }); if (maxV <= 0) maxV = 1;
+    var W = 860, H = 234, pl = 48, pr = 12, pt = 14, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = dates.length;
+    function xf(i) { return pl + (n > 1 ? pw / (n - 1) * i : pw / 2); } function yf(v) { return base - ph * Math.max(0, Math.min(1, v / maxV)); }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 0.5, 1].forEach(function (fr) { var y = pt + ph * (1 - fr); s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)" stroke-dasharray="2 3"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" fill="var(--muted2)" font-size="9">' + v2AxisFmt(maxV * fr) + '</text>'; });
+    top.forEach(function (g, gi) { var col = V2PAL[gi % V2PAL.length], pts = []; dates.forEach(function (dt, i) { var d = g.map[dt]; var v = d ? v2LineVal(d) : null; if (v != null) pts.push([xf(i), yf(v)]); }); if (pts.length > 1) s += '<path d="M' + pts.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + '" fill="none" stroke="' + col + '" stroke-width="2" opacity=".92"></path>'; pts.forEach(function (p) { s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.1" fill="' + col + '"></circle>'; }); });
+    v2Ticks(dates).forEach(function (i) { s += '<text x="' + xf(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" fill="var(--muted2)" font-size="9">' + dfmt(dates[i]) + '</text>'; });
+    var bandW = n > 1 ? pw / (n - 1) : pw; dates.forEach(function (dt, i) { var x = xf(i) - bandW / 2; if (x < pl) x = pl; s += '<rect class="v2hit" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + pt + '" width="' + bandW.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    var legend = top.map(function (g, gi) { var col = V2PAL[gi % V2PAL.length], nm = pretty(g.name); if (nm.length > 34) nm = nm.slice(0, 32) + '…'; return '<span class="v2leg' + (v2SelOf(g, level) ? ' on' : '') + '" data-key="' + encodeURIComponent(g.key) + '"><span class="dot" style="background:' + col + '"></span>' + esc(nm) + '</span>'; }).join('');
+    host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap"><span class="v2metnote">linha = <b>' + v2MetricLabel() + '/dia</b></span>' + legend + '</div>';
+    var byKey = {}; top.forEach(function (g) { byKey[g.key] = g; });
+    Array.prototype.forEach.call(host.querySelectorAll('.v2leg'), function (sp) { sp.addEventListener('click', function () { var g = byKey[decodeURIComponent(sp.getAttribute('data-key'))]; if (g) v2Pick(level, g); }); });
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) { var i = +rc.getAttribute('data-i'), dt = dates[i], items = []; top.forEach(function (g, gi) { var d = g.map[dt]; var v = d ? v2LineVal(d) : null; if (v != null) items.push({ nm: pretty(g.name), val: v, col: V2PAL[gi % V2PAL.length] }); }); items.sort(function (a, b) { return (b.val == null ? -1 : b.val) - (a.val == null ? -1 : a.val); }); var html = '<div class="tt-t">' + dfull(dt) + ' · ' + v2MetricLabel() + '</div>'; if (!items.length) html += '<div class="tt-r"><span>sem gasto no dia</span></div>'; else items.forEach(function (it) { var nm = it.nm.length > 24 ? it.nm.slice(0, 22) + '…' : it.nm; html += '<div class="tt-r"><span style="color:' + it.col + '">' + esc(nm) + '</span><b>' + v2LineFmt(it.val) + '</b></div>'; }); showTip(html, e); });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+  }
+  function v2Daily(host, days) {
+    if (!host) return;
+    if (!days.length) { host.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
+    var W = 860, H = 220, pl = 44, pr = 46, pt = 12, pb = 24, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = days.length;
+    var maxLd = Math.max.apply(null, days.map(function (d) { return d.ld; }).concat([1]));
+    var cpls = days.map(function (d) { return d.ld ? d.sp / d.ld : null; });
+    var maxCpl = Math.max.apply(null, cpls.filter(function (x) { return x != null; }).concat([1]));
+    var bw = pw / n, bar = Math.min(bw * 0.6, 30); function xc(i) { return pl + bw * i + bw / 2; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 1, 2, 3].forEach(function (k) { var y = pt + ph * k / 3; s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="var(--muted2)">' + fInt(Math.round(maxLd * (3 - k) / 3)) + '</text><text x="' + (W - pr + 5) + '" y="' + (y + 3) + '" text-anchor="start" font-size="9" fill="var(--gold)">' + fBRL0(maxCpl * (3 - k) / 3) + '</text>'; });
+    days.forEach(function (d, i) { var h = d.ld / maxLd * ph; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + (base - h).toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--teal)" opacity=".82" rx="1"></rect>'; });
+    var pts = []; days.forEach(function (d, i) { var c = cpls[i]; if (c == null) return; pts.push([xc(i), base - c / maxCpl * ph]); });
+    if (pts.length > 1) s += '<polyline points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" fill="none" stroke="var(--gold)" stroke-width="2"></polyline>';
+    pts.forEach(function (p) { s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.2" fill="var(--gold)"></circle>'; });
+    v2Ticks(days.map(function (d) { return d.date; })).forEach(function (i) { s += '<text x="' + xc(i).toFixed(1) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" fill="var(--muted2)">' + dfmt(days[i].date) + '</text>'; });
+    days.forEach(function (d, i) { s += '<rect class="v2hit" data-i="' + i + '" x="' + (pl + bw * i).toFixed(1) + '" y="' + pt + '" width="' + bw.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    host.innerHTML = '<div class="v2legwrap" style="justify-content:center;margin:0 0 4px"><span class="v2leg" style="cursor:default"><span class="dot" style="background:var(--teal)"></span>Leads/dia</span><span class="v2leg" style="cursor:default"><span class="dot" style="background:var(--gold)"></span>CPL/dia</span></div><div class="v2chart">' + s + '</div>';
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) { var d = days[+rc.getAttribute('data-i')], sc = d.la + d.lb + d.lc, estA = sc ? d.ld * (d.la / sc) : 0, conv = d.lp > 0 ? d.ld / d.lp : (d.ck > 0 ? d.ld / d.ck : null); showTip('<div class="tt-t">' + dfull(d.date) + '</div><div class="tt-r"><span>Investimento</span><b>' + fBRL0(d.sp) + '</b></div><div class="tt-r"><span style="color:var(--teal)">Leads</span><b>' + fInt(d.ld) + '</b></div><div class="tt-r"><span style="color:var(--gold)">CPL</span><b>' + money(d.ld ? d.sp / d.ld : null) + '</b></div><div class="tt-r"><span>Lead A est.</span><b>' + fInt(Math.round(estA)) + '</b></div><div class="tt-r"><span>Conv. página</span><b>' + (conv != null ? fPct(conv, 0) : '—') + '</b></div>', e); });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+  }
+  function v2CrumbHTML() {
+    var p = ['<a class="v2crumb' + (v2Sel.camp == null ? ' cur' : '') + '" data-lvl="0">📊 Todas as campanhas</a>'];
+    if (v2Sel.camp != null) p.push('<a class="v2crumb' + (v2Sel.adset == null ? ' cur' : '') + '" data-lvl="1">' + esc(pretty(v2Sel.camp)) + '</a>');
+    if (v2Sel.adset != null) p.push('<a class="v2crumb' + (v2Sel.ad == null ? ' cur' : '') + '" data-lvl="2">' + esc(pretty(v2Sel.adset)) + '</a>');
+    if (v2Sel.ad != null) p.push('<span class="v2crumb cur">' + esc(pretty(v2Sel.ad)) + '</span>');
+    return p.join(' <span class="v2sep">›</span> ');
+  }
+  function v2Skeleton() {
+    var st = 'font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)';
+    return '<div id="v2Wrap">' +
+      '<div class="v2bar"><div class="v2filters" id="v2Filters"></div><div class="v2crumbwrap"><span class="v2crumb-lab">Filtro ativo:</span> <span id="v2Crumb"></span></div></div>' +
+      '<div id="v2Kpi"></div>' +
+      '<div class="section-title" style="margin-top:16px">📅 Evolução diária do recorte <span style="' + st + '">· reage 100% ao filtro · leads (barra) + CPL (linha) · exclui hoje (parcial)</span><span class="st-line"></span></div>' +
+      '<div class="chart-card"><div id="v2Daily"></div></div>' +
+      '<div class="section-title">Campanhas <span style="' + st + '">· clique numa linha p/ filtrar a aba · clique de novo p/ limpar</span><span class="st-line"></span></div>' +
+      '<div id="v2TCamp"></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>📈 Evolução diária · por campanha</h4><div class="v2mn">métrica no seletor "Linhas" · top 8 por gasto · legenda clicável · hover</div></div><div id="v2LinesCamp"></div></div>' +
+      '<div class="section-title">Conjuntos / Grupos <span class="st-line"></span></div>' +
+      '<div id="v2TAdset"></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>📈 Evolução diária · por conjunto/grupo</h4></div><div id="v2LinesAdset"></div></div>' +
+      '<div class="section-title">Anúncios <span class="st-line"></span></div>' +
+      '<div id="v2TAd"></div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>📈 Evolução diária · por anúncio</h4></div><div id="v2LinesAd"></div></div>' +
+      '</div>';
+  }
+  function mountV2() {
+    if (!document.getElementById('v2Wrap')) return;
+    var rng = v2Range();
+    var base = v2Rows().filter(function (r) { return r.date >= rng.lo && r.date <= rng.hi; });
+    var clr = (v2Sel.camp != null || v2Sel.adset != null || v2Sel.ad != null) ? '<button class="v2clr" id="v2Clear">✕ limpar filtro</button>' : '';
+    document.getElementById('v2Filters').innerHTML = '<span class="pf-h">Período:</span>' + V2PW.map(function (w) { return '<button data-k="' + w.k + '" class="v2btn' + (v2Period === w.k ? ' on' : '') + '">' + w.l + '</button>'; }).join('') + '<span class="pf-h pf-ch">Linhas:</span>' + V2LM.map(function (x) { return '<button data-lm="' + x.k + '" class="v2btn' + (v2LineMetric === x.k ? ' on' : '') + '">' + x.l + '</button>'; }).join('') + clr;
+    Array.prototype.forEach.call(document.querySelectorAll('#v2Filters .v2btn[data-k]'), function (b) { b.addEventListener('click', function () { v2Period = b.getAttribute('data-k'); mountV2(); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('#v2Filters .v2btn[data-lm]'), function (b) { b.addEventListener('click', function () { v2LineMetric = b.getAttribute('data-lm'); mountV2(); }); });
+    var cl = document.getElementById('v2Clear'); if (cl) cl.addEventListener('click', function () { v2Sel = { camp: null, adset: null, ad: null }; mountV2(); });
+    document.getElementById('v2Crumb').innerHTML = v2CrumbHTML();
+    Array.prototype.forEach.call(document.querySelectorAll('#v2Crumb a.v2crumb'), function (a) { a.addEventListener('click', function () { var lvl = +a.getAttribute('data-lvl'); if (lvl === 0) v2Sel = { camp: null, adset: null, ad: null }; else if (lvl === 1) v2Sel = { camp: v2Sel.camp, adset: null, ad: null }; else v2Sel = { camp: v2Sel.camp, adset: v2Sel.adset, ad: null }; mountV2(); }); });
+    var scope = base.filter(function (r) { return (v2Sel.camp == null || r.campaign === v2Sel.camp) && (v2Sel.adset == null || r.adset === v2Sel.adset) && (v2Sel.ad == null || r.ad === v2Sel.ad); });
+    var agg = v2NewNode('', ''); scope.forEach(function (r) { v2Accum(agg, r); });
+    document.getElementById('v2Kpi').innerHTML = v2Kpis(agg);
+    var daily = v2SeriesByDate(scope, rng.hi); if (!daily.length) { var bd2 = {}; scope.forEach(function (r) { var o = bd2[r.date] || (bd2[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); daily = Object.keys(bd2).sort().map(function (d) { return bd2[d]; }); }
+    v2Daily(document.getElementById('v2Daily'), daily);
+    v2Table('v2TCamp', 'Campanhas', 'clique p/ filtrar', v2GroupBy(base, 0), 0);
+    v2Lines(v2GroupBy(base, 0), 'v2LinesCamp', 0);
+    var conjRows = v2Sel.camp != null ? base.filter(function (r) { return r.campaign === v2Sel.camp; }) : base;
+    v2Table('v2TAdset', 'Conjuntos / Grupos', v2Sel.camp != null ? 'da campanha selecionada' : 'todos', v2GroupBy(conjRows, 1), 1);
+    v2Lines(v2GroupBy(conjRows, 1), 'v2LinesAdset', 1);
+    var adRows = v2Sel.adset != null ? base.filter(function (r) { return r.campaign === v2Sel.camp && r.adset === v2Sel.adset; }) : (v2Sel.camp != null ? base.filter(function (r) { return r.campaign === v2Sel.camp; }) : base);
+    v2Table('v2TAd', 'Anúncios', v2Sel.adset != null ? 'do conjunto selecionado' : (v2Sel.camp != null ? 'da campanha selecionada' : 'todos'), v2GroupBy(adRows, 2), 2);
+    v2Lines(v2GroupBy(adRows, 2), 'v2LinesAd', 2);
+  }
+
+  /* =====================================================================
      ROUTER
   ===================================================================== */
   var mounted = {};
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
