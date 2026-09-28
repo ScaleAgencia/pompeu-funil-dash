@@ -331,6 +331,8 @@
         dview = consolidado(f, a);
       } else if (sub === 'v2') {
         dview = v2Skeleton();
+      } else if (sub === 'leads') {
+        dview = orgLeadsView(st.lo, st.hi);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
@@ -342,8 +344,9 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
+      if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
       if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
@@ -1632,7 +1635,7 @@
   function v2LineFmt(v) { if (v == null) return '—'; if (v2LineMetric === 'leads') return fInt(v); if (v2LineMetric === 'lda') return (Math.round(v * 10) / 10).toString().replace('.', ','); if (v2LineMetric === 'conv') return fPct(v, 0); return money(v); }
   function v2AxisFmt(v) { if (v2LineMetric === 'leads' || v2LineMetric === 'lda') return fInt(Math.round(v)); if (v2LineMetric === 'conv') return fPct(v, 0); return fBRL0(v); }
   function v2MetricLabel() { var x = V2LM.filter(function (m) { return m.k === v2LineMetric; })[0]; return x ? x.l : ''; }
-  function v2SeriesByDate(rows, hi) { var bd = {}; rows.forEach(function (r) { if (r.date === hi) return; var o = bd[r.date] || (bd[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); var ks = Object.keys(bd).sort(); return ks.map(function (d) { return bd[d]; }); }
+  function v2SeriesByDate(rows, hi) { var bd = {}; rows.forEach(function (r) { var o = bd[r.date] || (bd[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); var ks = Object.keys(bd).sort(); return ks.map(function (d) { return bd[d]; }); }
   function v2Ticks(dates) { var n = dates.length, step = Math.max(1, Math.ceil(n / 8)), out = []; for (var i = 0; i < n; i += step) out.push(i); if (n && out[out.length - 1] !== n - 1) out.push(n - 1); return out; }
   function v2Kpis(o) {
     var m = v2M(o);
@@ -1677,7 +1680,7 @@
     top.forEach(function (g) { g.series = v2SeriesByDate(g.rows, hi); var mp = {}; g.series.forEach(function (d) { mp[d.date] = d; }); g.map = mp; });
     var dset = {}; top.forEach(function (g) { g.series.forEach(function (d) { if (v2LineVal(d) != null) dset[d.date] = 1; }); });
     var dates = Object.keys(dset).sort();
-    if (!dates.length) { host.innerHTML = '<div class="empty">Sem dados no período p/ traçar as linhas (exclui hoje, parcial).</div>'; return; }
+    if (!dates.length) { host.innerHTML = '<div class="empty">Sem dados no período p/ traçar as linhas.</div>'; return; }
     var maxV = 0; top.forEach(function (g) { g.series.forEach(function (d) { var v = v2LineVal(d); if (v != null && v > maxV) maxV = v; }); }); if (maxV <= 0) maxV = 1;
     var W = 860, H = 234, pl = 48, pr = 12, pt = 14, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = dates.length;
     function xf(i) { return pl + (n > 1 ? pw / (n - 1) * i : pw / 2); } function yf(v) { return base - ph * Math.max(0, Math.min(1, v / maxV)); }
@@ -1731,7 +1734,7 @@
     return '<div id="v2Wrap">' +
       '<div class="v2bar"><div class="v2filters" id="v2Filters"></div><div class="v2crumbwrap"><span class="v2crumb-lab">Filtro ativo:</span> <span id="v2Crumb"></span></div></div>' +
       '<div id="v2Kpi"></div>' +
-      '<div class="section-title" style="margin-top:16px">📅 Evolução diária do recorte <span style="' + st + '">· reage 100% ao filtro · leads (barra) + CPL (linha) · exclui hoje (parcial)</span><span class="st-line"></span></div>' +
+      '<div class="section-title" style="margin-top:16px">📅 Evolução diária do recorte <span style="' + st + '">· reage 100% ao filtro · leads (barra) + CPL (linha) · inclui hoje (dia parcial)</span><span class="st-line"></span></div>' +
       '<div class="chart-card"><div id="v2Daily"></div></div>' +
       '<div class="section-title">Campanhas <span style="' + st + '">· clique numa linha p/ filtrar a aba · clique de novo p/ limpar</span><span class="st-line"></span></div>' +
       '<div id="v2TCamp"></div>' +
@@ -1771,12 +1774,91 @@
   }
 
   /* =====================================================================
+     🌱 LEADS ORGÂNICO + INFLUENCER (pedido Enrico) — visão geral + diária
+     Dados em window.POMPEU.orgLeads (build lê a v8 por Tag WBN-2026-ORG /
+     WBN-2026-INFLUENCER). Respeita o seletor de período do topo.
+  ===================================================================== */
+  var ORG_G = { days: [], topN: [], srcColor: {} };
+  var ORG_OUTRAS = '#5a6784';
+  function orgLeadsView(lo, hi) {
+    var O = D.orgLeads;
+    if (!O || !arr(O.daily).length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Ainda não há leads orgânicos / influencer registrados.<br><span style="color:var(--muted2);font-size:12px">Chegam na aba <b>v8</b> com tag <b>WBN-2026-ORG</b> ou <b>WBN-2026-INFLUENCER</b> · atualiza a cada 3h.</span></div>'; }
+    var days = arr(O.daily).filter(function (d) { return d.d >= lo && d.d <= hi; });
+    if (!days.length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Sem leads orgânicos / influencer no período selecionado.</div>'; }
+    var tot = 0, org = 0, infl = 0, srcTot = {};
+    days.forEach(function (d) { tot += d.n; org += d.o; infl += d.i; var s = d.s || {}; Object.keys(s).forEach(function (k) { srcTot[k] = (srcTot[k] || 0) + s[k]; }); });
+    var sources = Object.keys(srcTot).map(function (k) { return { k: k, n: srcTot[k] }; }).sort(function (a, b) { return b.n - a.n; });
+    var topSrc = sources[0];
+    var topN = sources.slice(0, 6).map(function (s) { return s.k; });
+    var srcColor = {}; topN.forEach(function (k, i) { srcColor[k] = V2PAL[i % V2PAL.length]; });
+    ORG_G = { days: days, topN: topN, srcColor: srcColor };
+    var bestDay = days.slice().sort(function (a, b) { return b.n - a.n; })[0];
+    // hero
+    var hero = '<div class="card kpi hero org-hero"><div class="klabel">🌱 Leads orgânicos + influencer</div>' +
+      '<div class="kval">' + fInt(tot) + '</div>' +
+      '<div class="org-thermo">' +
+      (org > 0 ? '<span style="width:' + (org / tot * 100).toFixed(1) + '%;background:var(--teal)" title="Orgânico">' + (org / tot > 0.08 ? fInt(org) : '') + '</span>' : '') +
+      (infl > 0 ? '<span style="width:' + (infl / tot * 100).toFixed(1) + '%;background:var(--acc2)" title="Influencer">' + (infl / tot > 0.05 ? fInt(infl) : '') + '</span>' : '') +
+      '</div>' +
+      '<div class="ksub"><span><span class="dot" style="background:var(--teal)"></span>Orgânico <span class="kv">' + fInt(org) + '</span></span>' +
+      '<span><span class="dot" style="background:var(--acc2)"></span>Influencer <span class="kv">' + fInt(infl) + '</span></span>' +
+      (topSrc ? '<span>fonte líder <span class="kv">' + esc(pretty(topSrc.k)) + '</span> (' + fInt(topSrc.n) + ')</span>' : '') + '</div></div>';
+    var kpis = '<div class="kpi-row">' + hero +
+      card3('🌱 Orgânico', fInt(org), '<span>' + fPct(org / (tot || 1), 0) + ' do total</span>') +
+      card3('🤝 Influencer', fInt(infl), '<span>' + fPct(infl / (tot || 1), 0) + ' do total</span>') + '</div>';
+    // fontes (barras por utm_source)
+    var maxSrc = sources.length ? sources[0].n : 1;
+    var srcRows = sources.map(function (s, i) { var col = i < topN.length ? srcColor[s.k] : ORG_OUTRAS; return '<div class="orgsrc"><span class="orgsrc-k"><span class="dot" style="background:' + col + '"></span>' + esc(pretty(s.k)) + '</span><span class="orgsrc-bar"><i style="width:' + Math.max(2, s.n / maxSrc * 100).toFixed(1) + '%;background:' + col + '"></i></span><span class="orgsrc-n">' + fInt(s.n) + '</span><span class="orgsrc-p">' + fPct(s.n / (tot || 1), 0) + '</span></div>'; }).join('');
+    var srcSection = '<div class="section-title">Fontes de captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· por utm_source · ' + fInt(sources.length) + ' fontes</span><span class="st-line"></span></div><div class="card"><div class="orgsrc-list">' + srcRows + '</div></div>';
+    // diario
+    var dailySection = '<div class="section-title">Leads por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· empilhado por fonte · passe o mouse</span><span class="st-line"></span></div><div class="chart-card"><div id="ch-org"></div></div>';
+    // tabela
+    var tblBody = days.slice().sort(function (a, b) { return b.d.localeCompare(a.d); }).map(function (d) {
+      var t = Object.keys(d.s || {}).map(function (k) { return { k: k, n: d.s[k] }; }).sort(function (a, b) { return b.n - a.n; })[0];
+      return '<tr><td class="l">' + dfull(d.d) + '</td><td>' + fInt(d.n) + '</td><td>' + fInt(d.o) + '</td><td>' + fInt(d.i) + '</td><td class="l">' + (t ? esc(pretty(t.k)) + ' <span class="muted">(' + fInt(t.n) + ')</span>' : '—') + '</td></tr>';
+    }).join('');
+    var tblSection = '<div class="section-title">Detalhe diário <span class="st-line"></span></div><div class="card tbl-card"><div class="tbl-scroll"><table class="vtbl v2tbl orgtbl"><thead><tr><th class="l">Dia</th><th>Leads</th><th>Orgânico</th><th>Influencer</th><th class="l">Fonte líder do dia</th></tr></thead><tbody>' + tblBody + '</tbody></table></div></div>';
+    return kpis + srcSection + dailySection + tblSection;
+  }
+  function orgDaily(host, days, topN, srcColor) {
+    if (!host) return;
+    if (!days.length) { host.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
+    var W = 860, H = 240, pl = 40, pr = 12, pt = 12, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = days.length;
+    var maxN = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1]));
+    var bw = pw / n, bar = Math.min(bw * 0.62, 34); function xc(i) { return pl + bw * i + bw / 2; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 1, 2, 3].forEach(function (k) { var y = pt + ph * k / 3; s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="var(--muted2)">' + fInt(Math.round(maxN * (3 - k) / 3)) + '</text>'; });
+    days.forEach(function (d, i) {
+      var yTop = base, used = 0;
+      topN.forEach(function (k) { var v = (d.s && d.s[k]) || 0; used += v; if (v > 0) { var h = v / maxN * ph; yTop -= h; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + srcColor[k] + '" opacity=".9"></rect>'; } });
+      var outras = d.n - used; if (outras > 0) { var h2 = outras / maxN * ph; yTop -= h2; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h2.toFixed(1) + '" fill="' + ORG_OUTRAS + '" opacity=".9"></rect>'; }
+    });
+    v2Ticks(days.map(function (d) { return d.d; })).forEach(function (i) { s += '<text x="' + xc(i).toFixed(1) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" fill="var(--muted2)">' + dfmt(days[i].d) + '</text>'; });
+    days.forEach(function (d, i) { s += '<rect class="v2hit" data-i="' + i + '" x="' + (pl + bw * i).toFixed(1) + '" y="' + pt + '" width="' + bw.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    var leg = topN.map(function (k) { return '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + srcColor[k] + '"></span>' + esc(pretty(k)) + '</span>'; }).join('') + '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + ORG_OUTRAS + '"></span>outros</span>';
+    host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap">' + leg + '</div>';
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) {
+        var d = days[+rc.getAttribute('data-i')], items = [], used = 0;
+        topN.forEach(function (k) { var v = (d.s && d.s[k]) || 0; used += v; if (v > 0) items.push([pretty(k), v, srcColor[k]]); });
+        var outras = d.n - used; if (outras > 0) items.push(['outros', outras, ORG_OUTRAS]);
+        var html = '<div class="tt-t">' + dfull(d.d) + ' · ' + fInt(d.n) + ' leads</div>';
+        items.forEach(function (it) { html += '<div class="tt-r"><span style="color:' + it[2] + '">' + esc(it[0]) + '</span><b>' + fInt(it[1]) + '</b></div>'; });
+        html += '<div class="tt-r" style="border-top:1px solid var(--line);margin-top:3px;padding-top:3px"><span>Orgânico / Influencer</span><b>' + fInt(d.o) + ' / ' + fInt(d.i) + '</b></div>';
+        showTip(html, e);
+      });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+  }
+
+  /* =====================================================================
      ROUTER
   ===================================================================== */
   var mounted = {};
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;

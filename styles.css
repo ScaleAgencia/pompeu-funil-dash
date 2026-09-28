@@ -228,7 +228,7 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 .chart-tip .tt-r b{color:var(--txt)}
 
 /* ---- optimization two columns ---- */
-.opt-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.opt-cols{display:grid;grid-template-columns:1fr;gap:14px}   /* empilhado (Google em cima, Meta embaixo) -> coluna do nome ganha largura total p/ mostrar campanha inteira */
 .opt-cols.single{grid-template-columns:1fr}   /* funil diario = so Meta */
 .opt-col{background:linear-gradient(170deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .opt-col.g{border-top:3px solid var(--goog)}
@@ -555,3 +555,29 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .v2hit{cursor:crosshair}
 @media (max-width:1080px){.v2crumbwrap{margin-left:0;width:100%}}
 @media (max-width:560px){.v2bar{padding:10px 12px}.v2filters .pf-ch{margin-left:0}}
+
+/* ===== nome de campanha INTEIRO na arvore de otimizacao (pedido: nomes longos so diferem no fim) ===== */
+/* lvl0 (campanha) quebra linha e mostra o nome completo; conjunto/anuncio mantem reticencias + hover */
+/* line-clamp evita explosao vertical se a largura ainda for curta (nome do Google e so underscore) */
+.tr-row.lvl0 .tr-name{align-items:flex-start}
+.tr-row.lvl0 .nm{white-space:normal;overflow:hidden;text-overflow:ellipsis;overflow-wrap:anywhere;line-height:1.24;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+/* dar um respiro no nome encolhendo levemente as colunas numericas dos 2 modos do live */
+.tree.dd .tr-row{grid-template-columns:1fr 72px 44px 54px 52px 82px 82px}
+.tree.dd.spk .tr-row{grid-template-columns:1fr 66px 42px 50px 48px 66px 52px 74px}
+/* V2: nome tambem inteiro (quebra em vez de cortar) */
+.v2tbl td.l .v2name{white-space:normal;word-break:break-word;max-width:none;line-height:1.22}
+.v2tbl td.l{vertical-align:top}
+
+/* ===== 🌱 aba Leads Orgânico + Influencer ===== */
+.org-hero .kval{background:linear-gradient(90deg,#bff3ff,#9ff5cf);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.org-thermo{display:flex;height:22px;border-radius:8px;overflow:hidden;background:var(--panel3);margin:12px 0 6px}
+.org-thermo span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#08131f;font-family:var(--display);min-width:2px}
+.orgsrc-list{display:flex;flex-direction:column;gap:9px}
+.orgsrc{display:grid;grid-template-columns:200px 1fr 54px 44px;gap:10px;align-items:center;font-size:12.5px}
+.orgsrc-k{display:flex;align-items:center;gap:7px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orgsrc-bar{height:9px;border-radius:6px;background:var(--panel3);overflow:hidden}
+.orgsrc-bar i{display:block;height:100%;border-radius:6px}
+.orgsrc-n{text-align:right;font-family:var(--display);font-weight:700}
+.orgsrc-p{text-align:right;color:var(--muted2);font-size:11.5px;font-variant-numeric:tabular-nums}
+.orgtbl td.l .muted{color:var(--muted2);font-family:inherit}
+@media (max-width:560px){.orgsrc{grid-template-columns:120px 1fr 46px}.orgsrc-p{display:none}}
