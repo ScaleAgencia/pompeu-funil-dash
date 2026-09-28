@@ -1669,6 +1669,10 @@
   }
   function v2Lines(groups, elId, level) {
     var host = document.getElementById(elId); if (!host) return;
+    // pedido do cliente: quando há seleção NESTE nível, o gráfico isola só a linha do item selecionado
+    // (as tabelas continuam mostrando tudo; só o gráfico foca no selecionado p/ dar pra ver qual é a linha)
+    var selAtLevel = (level === 0 && v2Sel.camp != null) || (level === 1 && v2Sel.adset != null) || (level === 2 && v2Sel.ad != null);
+    if (selAtLevel) groups = groups.filter(function (g) { return v2SelOf(g, level); });
     var hi = v2Range().hi, top = groups.slice(0, 8);
     top.forEach(function (g) { g.series = v2SeriesByDate(g.rows, hi); var mp = {}; g.series.forEach(function (d) { mp[d.date] = d; }); g.map = mp; });
     var dset = {}; top.forEach(function (g) { g.series.forEach(function (d) { if (v2LineVal(d) != null) dset[d.date] = 1; }); });
@@ -1683,8 +1687,8 @@
     v2Ticks(dates).forEach(function (i) { s += '<text x="' + xf(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" fill="var(--muted2)" font-size="9">' + dfmt(dates[i]) + '</text>'; });
     var bandW = n > 1 ? pw / (n - 1) : pw; dates.forEach(function (dt, i) { var x = xf(i) - bandW / 2; if (x < pl) x = pl; s += '<rect class="v2hit" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + pt + '" width="' + bandW.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
     s += '</svg>';
-    var legend = top.map(function (g, gi) { var col = V2PAL[gi % V2PAL.length], nm = pretty(g.name); if (nm.length > 34) nm = nm.slice(0, 32) + '…'; return '<span class="v2leg' + (v2SelOf(g, level) ? ' on' : '') + '" data-key="' + encodeURIComponent(g.key) + '"><span class="dot" style="background:' + col + '"></span>' + esc(nm) + '</span>'; }).join('');
-    host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap"><span class="v2metnote">linha = <b>' + v2MetricLabel() + '/dia</b></span>' + legend + '</div>';
+    var legend = top.map(function (g, gi) { var col = V2PAL[gi % V2PAL.length], full = pretty(g.name), lim = top.length === 1 ? 90 : 34, nm = full.length > lim ? full.slice(0, lim - 1) + '…' : full; return '<span class="v2leg' + (v2SelOf(g, level) ? ' on' : '') + '" title="' + esc(full) + '" data-key="' + encodeURIComponent(g.key) + '"><span class="dot" style="background:' + col + '"></span>' + esc(nm) + '</span>'; }).join('');
+    host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap"><span class="v2metnote">linha = <b>' + v2MetricLabel() + '/dia</b>' + (selAtLevel ? ' · <b style="color:var(--acc)">só o selecionado</b>' : '') + '</span>' + legend + '</div>';
     var byKey = {}; top.forEach(function (g) { byKey[g.key] = g; });
     Array.prototype.forEach.call(host.querySelectorAll('.v2leg'), function (sp) { sp.addEventListener('click', function () { var g = byKey[decodeURIComponent(sp.getAttribute('data-key'))]; if (g) v2Pick(level, g); }); });
     Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
