@@ -335,10 +335,12 @@
         dview = orgLeadsView(st.lo, st.hi);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
+          visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
           '<div class="section-title">Otimização por leadscore A / B / C <span class="st-line"></span></div>' + dailyBanner() +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'abc') + optColDaily(f, 'm', st.lo, st.hi, 'abc') + '</div>';
       } else {
         dview = capOptBanner(key) + chartsBlock(key) +
+          visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
           '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM + CPL por dia (passe o mouse)</span><span class="st-line"></span></div>' +
           '<div class="opt-cols">' + optColDaily(f, 'g', st.lo, st.hi, 'cpl') + optColDaily(f, 'm', st.lo, st.hi, 'cpl') + '</div>';
       }
@@ -1736,6 +1738,8 @@
       '<div id="v2Kpi"></div>' +
       '<div class="section-title" style="margin-top:16px">📅 Evolução diária do recorte <span style="' + st + '">· reage 100% ao filtro · leads (barra) + CPL (linha) · inclui hoje (dia parcial)</span><span class="st-line"></span></div>' +
       '<div class="chart-card"><div id="v2Daily"></div></div>' +
+      '<div class="section-title">📅 Visão diária <span style="' + st + '">· uma linha por dia (mais recente no topo) · reage ao filtro · CPL e CPM verde (bom) → vermelho (caro) vs. mediana</span><span class="st-line"></span></div>' +
+      '<div id="v2Visao"></div>' +
       '<div class="section-title">Campanhas <span style="' + st + '">· clique numa linha p/ filtrar a aba · clique de novo p/ limpar</span><span class="st-line"></span></div>' +
       '<div id="v2TCamp"></div>' +
       '<div class="chart-card"><div class="chart-head"><h4>📈 Evolução diária · por campanha</h4><div class="v2mn">métrica no seletor "Linhas" · top 8 por gasto · legenda clicável · hover</div></div><div id="v2LinesCamp"></div></div>' +
@@ -1763,6 +1767,7 @@
     document.getElementById('v2Kpi').innerHTML = v2Kpis(agg);
     var daily = v2SeriesByDate(scope, rng.hi); if (!daily.length) { var bd2 = {}; scope.forEach(function (r) { var o = bd2[r.date] || (bd2[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); daily = Object.keys(bd2).sort().map(function (d) { return bd2[d]; }); }
     v2Daily(document.getElementById('v2Daily'), daily);
+    var v2vi = document.getElementById('v2Visao'); if (v2vi) v2vi.innerHTML = visaoDiaria(diaAgg(scope));
     v2Table('v2TCamp', 'Campanhas', 'clique p/ filtrar', v2GroupBy(base, 0), 0);
     v2Lines(v2GroupBy(base, 0), 'v2LinesCamp', 0);
     var conjRows = v2Sel.camp != null ? base.filter(function (r) { return r.campaign === v2Sel.camp; }) : base;
@@ -1850,6 +1855,35 @@
       });
       rc.addEventListener('mouseleave', hideTip);
     });
+  }
+
+  /* =====================================================================
+     📅 VISÃO DIÁRIA — tabela 1 linha/dia (Gasto, Leads, CPL, CPM, CTR, Conv.pág)
+     Usada na aba Otimização (v1) e na V2. Meta já vem c/ imposto no grain.
+     Conv. página combinada = leads ÷ (LPV do Meta + cliques do Google).
+  ===================================================================== */
+  function diaAgg(rows) {
+    var by = {};
+    rows.forEach(function (r) { var o = by[r.date] || (by[r.date] = { d: r.date, sp: 0, ld: 0, im: 0, ck: 0, lp: 0, mLp: 0, gCk: 0 }); o.sp += r.sp || 0; o.ld += r.ld || 0; o.im += r.im || 0; o.ck += r.ck || 0; o.lp += r.lp || 0; if (r.plat === 'm') o.mLp += r.lp || 0; else if (r.plat === 'g') o.gCk += r.ck || 0; });
+    return Object.keys(by).sort().reverse().map(function (d) { return by[d]; });   // mais recente no topo
+  }
+  function diaMet(o) { return { sp: o.sp, ld: o.ld, cpl: o.ld ? o.sp / o.ld : null, cpm: o.im ? o.sp / (o.im / 1000) : null, ctr: o.im ? o.ck / o.im : null, conv: (o.mLp + o.gCk) ? o.ld / (o.mLp + o.gCk) : null }; }
+  function visaoDiaria(dayRows) {
+    if (!dayRows.length) return '<div class="card"><div class="empty">Sem dados no período.</div></div>';
+    var ms = dayRows.map(diaMet);
+    var medCpl = median(ms.map(function (m) { return m.cpl; }).filter(function (x) { return x != null; }));
+    var medCpm = median(ms.map(function (m) { return m.cpm; }).filter(function (x) { return x != null; }));
+    var head = '<thead><tr><th class="l">Dia</th><th>Gasto</th><th>Leads</th><th>CPL</th><th>CPM</th><th>CTR</th><th>Conv. pág.</th></tr></thead>';
+    var body = dayRows.map(function (o, i) {
+      var m = ms[i];
+      var cplC = m.cpl != null ? '<span class="dia-pill" style="background:' + cplColor(m.cpl, medCpl) + '">' + money(m.cpl) + '</span>' : '<span class="muted">—</span>';
+      var cpmC = m.cpm != null ? '<span class="dia-pill" style="background:' + cplColor(m.cpm, medCpm) + '">' + money(m.cpm) + '</span>' : '<span class="muted">—</span>';
+      return '<tr><td class="l">' + dfmt(o.d) + '</td><td>' + fBRL0(m.sp) + '</td><td>' + fInt(m.ld) + '</td><td>' + cplC + '</td><td>' + cpmC + '</td><td>' + (m.ctr != null ? fPct(m.ctr) : '—') + '</td><td>' + (m.conv != null ? fPct(m.conv) : '—') + '</td></tr>';
+    }).join('');
+    return '<div class="card tbl-card dia-card"><div class="tbl-scroll dia-scroll"><table class="vtbl dia-tbl">' + head + '<tbody>' + body + '</tbody></table></div></div>';
+  }
+  function visaoDiariaSection(rows) {
+    return '<div class="section-title">📅 Visão diária <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· uma linha por dia (mais recente no topo) · CPL e CPM verde (bom) → vermelho (caro) vs. mediana do período</span><span class="st-line"></span></div>' + visaoDiaria(diaAgg(rows));
   }
 
   /* =====================================================================

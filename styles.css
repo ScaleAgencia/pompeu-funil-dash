@@ -581,3 +581,14 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .orgsrc-p{text-align:right;color:var(--muted2);font-size:11.5px;font-variant-numeric:tabular-nums}
 .orgtbl td.l .muted{color:var(--muted2);font-family:inherit}
 @media (max-width:560px){.orgsrc{grid-template-columns:120px 1fr 46px}.orgsrc-p{display:none}}
+
+/* ===== 📅 Visão diária (tabela por dia) — abas Otimização (v1) e V2 ===== */
+.dia-card{padding:0}
+.dia-scroll{max-height:460px;overflow-y:auto}
+.dia-tbl{min-width:520px}
+.dia-tbl th{position:sticky;top:0;background:var(--panel);z-index:1;text-align:center}
+.dia-tbl th.l{text-align:left}
+.dia-tbl td{text-align:center;font-family:var(--display);font-variant-numeric:tabular-nums}
+.dia-tbl td.l{text-align:left;font-family:inherit;color:var(--muted);font-weight:600}
+.dia-pill{color:#0a0f1c;font-weight:800;padding:3px 11px;border-radius:20px;font-family:var(--display);font-size:12px;display:inline-block;min-width:62px;text-align:center}
+.dia-tbl td .muted{color:var(--muted2)}
