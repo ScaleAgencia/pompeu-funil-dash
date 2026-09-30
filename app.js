@@ -333,6 +333,8 @@
         dview = v2Skeleton();
       } else if (sub === 'leads') {
         dview = orgLeadsView(st.lo, st.hi);
+      } else if (sub === 'cap30') {
+        dview = cap30View(st.lo, st.hi);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
@@ -346,7 +348,7 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
@@ -1625,7 +1627,8 @@
   var V2LM = [{ k: 'cpl', l: 'CPL' }, { k: 'cpla', l: 'CPL A' }, { k: 'leads', l: 'Leads' }, { k: 'lda', l: 'Lead A' }, { k: 'conv', l: 'Conv. pág' }];
   var V2PW = [{ k: '7d', l: '7 dias' }, { k: '14d', l: '14 dias' }, { k: '30d', l: '30 dias' }, { k: 'tudo', l: 'Tudo' }];
   function v2Fun() { return D[CUR]; }
-  function v2Rows() { return arr(v2Fun().grain).map(function (g) { return { date: g.d, plat: g.p, campaign: NM.c[g.c], adset: NM.s[g.s], ad: NM.a[g.a], sp: g.sp, im: g.im || 0, ck: g.ck || 0, lp: g.lp || 0, ld: g.ld || 0, la: g.la || 0, lb: g.lb || 0, lc: g.lc || 0, rev: g.rev || 0, sales: g.sales || 0 }; }); }
+  function grainRows(f) { return arr(f.grain).map(function (g) { return { date: g.d, plat: g.p, campaign: NM.c[g.c], adset: NM.s[g.s], ad: NM.a[g.a], sp: g.sp, im: g.im || 0, ck: g.ck || 0, lp: g.lp || 0, ld: g.ld || 0, la: g.la || 0, lb: g.lb || 0, lc: g.lc || 0, rev: g.rev || 0, sales: g.sales || 0 }; }); }
+  function v2Rows() { return grainRows(v2Fun()); }
   function v2Range() { var r = funnelRange(v2Fun()), hi = r.hi, lo = r.lo; var back = v2Period === '7d' ? -6 : (v2Period === '14d' ? -13 : (v2Period === '30d' ? -29 : null)); if (back != null) { var l2 = addDays(hi, back); if (l2 > lo) lo = l2; } return { lo: lo, hi: hi }; }
   function v2NewNode(name, key) { return { name: name, key: key, camp: '', adset: '', ad: '', sp: 0, im: 0, ck: 0, lp: 0, ld: 0, la: 0, lb: 0, lc: 0, rev: 0, sales: 0, mSp: 0, gSp: 0, mLd: 0, gLd: 0, mLp: 0, gCk: 0, plat: '', rows: [] }; }
   function v2Accum(o, r) { o.sp += r.sp; o.im += r.im; o.ck += r.ck; o.lp += r.lp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.rev += r.rev; o.sales += r.sales; if (r.plat === 'm') { o.mSp += r.sp; o.mLd += r.ld; o.mLp += r.lp; } else if (r.plat === 'g') { o.gSp += r.sp; o.gLd += r.ld; o.gCk += r.ck; } if (!o.plat) o.plat = r.plat; else if (o.plat !== r.plat) o.plat = 'x'; o.rows.push(r); }
@@ -1887,12 +1890,28 @@
   }
 
   /* =====================================================================
+     🚀 CAPTAÇÃO 30/09 — funil novo (D.cap30): gasto+leads só a partir de 30/09,
+     cruzando queries YOUTUBE_LIVE com os leads NOVOS da aba v9. Captação (CPL).
+  ===================================================================== */
+  function cap30View(lo, hi) {
+    var fc = D.cap30;
+    if (!fc || !arr(fc.grain).length) return '<div class="empty" style="padding:56px 20px">Sem dados de captação a partir de 30/09 ainda.<br><span style="color:var(--muted2);font-size:12px">Cruza as queries YOUTUBE_LIVE (gasto ≥ 30/09) com os leads novos da aba <b>v9</b> · atualiza a cada 3h.</span></div>';
+    var a = agg(fc, lo, hi);
+    var rows = grainRows(fc).filter(function (r) { return r.date >= lo && r.date <= hi; });
+    var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
+    return banner + kpiRow('cap30', a, false) +
+      visaoDiariaSection(rows) +
+      '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM · campanha › conjunto › anúncio</span><span class="st-line"></span></div>' +
+      '<div class="opt-cols">' + optColDaily(fc, 'g', lo, hi, 'cpl') + optColDaily(fc, 'm', lo, hi, 'cpl') + '</div>';
+  }
+
+  /* =====================================================================
      ROUTER
   ===================================================================== */
   var mounted = {};
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1 };
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
