@@ -353,7 +353,7 @@
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
-      if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); wirePerfilFilters(); }
+      if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); tierDaily($('#ch-tier-' + key), TIER_G || []); wirePerfilFilters(); }
       if (sub === 'acomp' && hasScore) { qualityDaily($('#ch-acq-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); cplADaily($('#ch-accpla-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); }
       wireTrees(key);
       return;
@@ -955,6 +955,60 @@
       '</div></div></div>';
   }
   // ---- PERFIL DO LEAD (sub-aba do diario) — filtravel por UTM ----
+  /* =====================================================================
+     💰 CAPACIDADE DE INVESTIMENTO (tag 297/469/797) — pedido Enrico.
+     A tag do lead termina com o nº da oferta que ele vai receber, que indica
+     quanto consegue aportar/mês. Leadscore de VALOR. Começou na v9 (29/09+).
+     Conta TODOS os leads do período (não só respondentes); não usa filtro UTM.
+  ===================================================================== */
+  var TIER_DEF = [
+    { k: 't797', lab: '$797', cap: 'R$ 1k–2k+/mês', col: '#34e5b0' },
+    { k: 't469', lab: '$469', cap: 'R$ 100–1.000/mês', col: '#ffce5c' },
+    { k: 't297', lab: '$297', cap: 'até R$ 100/mês', col: '#57e6ff' },
+    { k: 'tNone', lab: 'Sem tag', cap: 'leads antigos / sem nº', col: '#5a6784' }
+  ];
+  var TIER_G = [];
+  function invTierSection(f, lo, hi) {
+    var days = arr(f.invTiers).filter(function (d) { return d.d >= lo && d.d <= hi; });
+    TIER_G = days;
+    var sum = { t297: 0, t469: 0, t797: 0, tNone: 0 };
+    days.forEach(function (d) { sum.t297 += d.t297 || 0; sum.t469 += d.t469 || 0; sum.t797 += d.t797 || 0; sum.tNone += d.tNone || 0; });
+    var tagged = sum.t297 + sum.t469 + sum.t797, total = tagged + sum.tNone;
+    if (!total) return '';
+    var premium = sum.t797 + sum.t469;
+    function seg(v, col, lab) { return v > 0 ? '<span style="width:' + (v / total * 100).toFixed(1) + '%;background:' + col + '" title="' + lab + ': ' + v + '">' + (v / total > 0.06 ? fInt(v) : '') + '</span>' : ''; }
+    var thermo = '<div class="tier-thermo">' + TIER_DEF.map(function (t) { return seg(sum[t.k], t.col, t.lab); }).join('') + '</div>';
+    var cards = '<div class="kpi-row" style="margin-top:12px">' + TIER_DEF.map(function (t) {
+      var v = sum[t.k];
+      var sub = t.k === 'tNone' ? '<span>' + fPct(v / (total || 1), 0) + ' do total · ' + esc(t.cap) + '</span>' : '<span>' + fPct(v / (tagged || 1), 0) + ' dos com tag · ' + esc(t.cap) + '</span>';
+      return '<div class="card kpi"><div class="klabel"><span class="dot" style="background:' + t.col + '"></span>' + t.lab + '</div><div class="kval">' + fInt(v) + '</div><div class="ksub">' + sub + '</div></div>';
+    }).join('') + '</div>';
+    var note = tagged === 0
+      ? '<div class="banner" style="margin:10px 0">ℹ️ <div>Nenhum lead do período veio com a tag de capacidade (297/469/797). Essa marcação começou em <b>29/09</b> (leads novos na aba v9) — conforme entrarem, aparecem aqui.</div></div>'
+      : '<div class="banner" style="margin:10px 0">💰 <div>Cada lead vem com uma <b>tag de capacidade de aporte mensal</b> = a oferta que vai receber: <b>$297</b> até R$100/mês · <b>$469</b> R$100–1.000 · <b>$797</b> R$1k–2k+. Quanto maior, mais capital o lead tem (leadscore de valor). Conta <b>todos os leads</b> do período, não só respondentes. <b>' + fInt(premium) + '</b> de <b>' + fInt(tagged) + '</b> com tag são de capacidade média/alta (469+797).</div></div>';
+    var chart = '<div class="chart-card" style="margin-top:12px"><div class="chart-head"><h4>Volume por dia · capacidade de investimento</h4><div class="legend"><span><i style="background:#34e5b0"></i>$797</span><span><i style="background:#ffce5c"></i>$469</span><span><i style="background:#57e6ff"></i>$297</span><span><i style="background:#5a6784"></i>sem tag</span></div></div><div id="ch-tier-' + f.key + '"></div></div>';
+    return '<div class="section-title" style="margin-top:2px">💰 Capacidade de investimento <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· tag 297 / 469 / 797 do lead · leadscore de valor (todos os leads do período)</span><span class="st-line"></span></div>' + note + thermo + cards + chart;
+  }
+  function tierDaily(host, days) {
+    if (!host) return;
+    if (!days.length) { host.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
+    var W = 860, H = 230, pl = 40, pr = 12, pt = 12, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = days.length;
+    var tot = days.map(function (d) { return (d.t297 || 0) + (d.t469 || 0) + (d.t797 || 0) + (d.tNone || 0); });
+    var maxN = Math.max.apply(null, tot.concat([1]));
+    var bw = pw / n, bar = Math.min(bw * 0.62, 34); function xc(i) { return pl + bw * i + bw / 2; }
+    var order = [{ k: 't797', col: '#34e5b0' }, { k: 't469', col: '#ffce5c' }, { k: 't297', col: '#57e6ff' }, { k: 'tNone', col: '#5a6784' }];
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 1, 2, 3].forEach(function (k) { var y = pt + ph * k / 3; s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="var(--muted2)">' + fInt(Math.round(maxN * (3 - k) / 3)) + '</text>'; });
+    days.forEach(function (d, i) { var yTop = base; order.forEach(function (o) { var v = d[o.k] || 0; if (v > 0) { var h = v / maxN * ph; yTop -= h; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + o.col + '" opacity=".9"></rect>'; } }); });
+    v2Ticks(days.map(function (d) { return d.d; })).forEach(function (i) { s += '<text x="' + xc(i).toFixed(1) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" fill="var(--muted2)">' + dfmt(days[i].d) + '</text>'; });
+    days.forEach(function (d, i) { s += '<rect class="v2hit" data-i="' + i + '" x="' + (pl + bw * i).toFixed(1) + '" y="' + pt + '" width="' + bw.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    host.innerHTML = '<div class="v2chart">' + s + '</div>';
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) { var d = days[+rc.getAttribute('data-i')], tt = (d.t297 || 0) + (d.t469 || 0) + (d.t797 || 0) + (d.tNone || 0); var html = '<div class="tt-t">' + dfull(d.d) + ' · ' + fInt(tt) + ' leads</div>'; TIER_DEF.forEach(function (t) { var v = d[t.k] || 0; if (v > 0) html += '<div class="tt-r"><span style="color:' + t.col + '">' + t.lab + ' <span style="color:var(--muted2)">' + esc(t.cap) + '</span></span><b>' + fInt(v) + '</b></div>'; }); showTip(html, e); });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+  }
   function perfilDiario(f, lo, hi) {
     var R = arr(f.resp), RO = f.respOpts || {};
     var Rp = R.filter(function (r) { return r[0] >= lo && r[0] <= hi; });   // recorte por período
@@ -975,7 +1029,7 @@
       '<div class="banner" style="margin-bottom:14px">📊 <div>O <b>índice de conversão</b> ao lado de cada resposta é o sinal real: <b style="color:var(--teal)">verde ≥ 1</b> converte acima da média, <b style="color:var(--red)">vermelho &lt; 1</b> abaixo. Recalculado a cada venda pelo cruzamento pesquisa × compradores. <b>Não confundir com peso de score</b> — a otimização usa as regras A/B/C, não soma de pontos. Ex.: aporte "até R$ 100" e "acima de R$ 2.000" aparecem com índice &lt; 1 (ruins) e <b>não contam pra Lead A</b>.</div></div>' +
       '<div class="dims-grid">' + PDK.map(function (dk) { return dimCardR(dk, dimLabel[dk] || dk, g.pdist[dk] || {}, RO[dk] || []); }).join('') + '</div>';
     return '<div class="section-title">Perfil do lead · ' + (FLABEL[f.key] || '') + ' <span class="st-line"></span></div>' +
-      utmFilterBar(Rp) + qual + cards + aderenciaPanel(g, RO) + abcRuler() + dims;
+      utmFilterBar(Rp) + invTierSection(f, lo, hi) + qual + cards + aderenciaPanel(g, RO) + abcRuler() + dims;
   }
   // ---- PIZZAS (donut) — comparação leads × comprador, estilo SIP ----
   function rampColor(t) {

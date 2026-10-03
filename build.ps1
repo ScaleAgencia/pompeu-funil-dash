@@ -427,6 +427,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   $emIndex = @{}   # emailKey -> ArrayList of leadObj (this funnel)
   $seenEm = New-Object 'System.Collections.Generic.HashSet[string]'   # dedup por email ($dedupEmail): guarda o 1o de cada email
   $dupEm = 0
+  $invTierDay = @{}   # tier de capacidade de investimento (tag termina em -297/-469/-797) -> contagem por dia (pedido Enrico)
   $phIndex = @{}
   $nmIndex = @{}   # nomeKey -> ArrayList of leadObj (so quando $buildNameIdx; usado no fallback de atribuicao)
   $edLeads = @{}   # tag -> lead count (edicao/semana)
@@ -478,6 +479,10 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($null -eq $n) { $n = @{ d = $d; p = $p; c = $ci; s = $si; a = $ai; sp = 0.0; im = 0.0; ck = 0.0; lp = 0.0; rc = 0.0; px = 0.0; ld = 0; rs = 0; f = 0; m = 0; q = 0; la = 0; lb = 0; lc = 0; rev = 0.0; sales = 0 }; $grain[$gk] = $n }
     $n.ld += 1
     $totalLeads++
+    # tier de capacidade de investimento: tag termina em -297 (ate 100/mes), -469 (100-1k), -797 (1k-2k+)
+    $tier = if ($tag -match '-(297|469|797)$') { $matches[1] } else { 'sem' }
+    $ivd = $invTierDay[$d]; if ($null -eq $ivd) { $ivd = @{ t297 = 0; t469 = 0; t797 = 0; tNone = 0 }; $invTierDay[$d] = $ivd }
+    switch ($tier) { '297' { $ivd.t297++ } '469' { $ivd.t469++ } '797' { $ivd.t797++ } default { $ivd.tNone++ } }
     $edLeads[$tag] = $edLeads[$tag] + 1
     $ek2 = "$tag|$d"; $edDay[$ek2] = $edDay[$ek2] + 1
     $ek = $em.Trim().ToLowerInvariant()
@@ -587,7 +592,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     key = $key; grain = $grain; emIndex = $emIndex; phIndex = $phIndex; nameIndex = $nmIndex;
     totalLeads = $totalLeads; respTot = $respTot; respMatch = $respMatch;
     tierTot = $tierTot; abcTot = $abcTot; dist = $dist; prof = $prof; edLeads = $edLeads; edDay = $edDay; survDay = $survDay;
-    respRows = @($respRows); respOpts = $respOpts
+    respRows = @($respRows); respOpts = $respOpts; invTierDay = $invTierDay
   }
 }
 
@@ -761,6 +766,10 @@ function Finalize-Funnel($fn, $dow, $dropLeadless = $false) {
   $svArr = New-Object System.Collections.ArrayList
   foreach ($k in ($fn.survDay.Keys | Sort-Object)) { [void]$svArr.Add(@{ date = $k; tot = $fn.survDay[$k].tot; mat = $fn.survDay[$k].mat }) }
 
+  # tier de capacidade de investimento (297/469/797) por dia -> p/ a visao na aba Perfil
+  $itArr = New-Object System.Collections.ArrayList
+  foreach ($k in ($fn.invTierDay.Keys | Sort-Object)) { $x = $fn.invTierDay[$k]; [void]$itArr.Add(@{ d = $k; t297 = $x.t297; t469 = $x.t469; t797 = $x.t797; tNone = $x.tNone }) }
+
   return @{
     key = $fn.key; leadMin = $lmin; leadMax = $lmax
     totalLeads = $fn.totalLeads; leadsEra = $leadsEra
@@ -768,7 +777,7 @@ function Finalize-Funnel($fn, $dow, $dropLeadless = $false) {
     totalRev = [Math]::Round($totRev, 2); totalSales = $totSales
     editions = @($eds); survDaily = @($svArr)
     daily = $daily; grain = @($grArr); dist = $fn.dist; prof = $fn.prof
-    resp = @($fn.respRows); respOpts = $fn.respOpts
+    resp = @($fn.respRows); respOpts = $fn.respOpts; invTiers = @($itArr)
   }
 }
 
@@ -877,7 +886,7 @@ function FunnelPayload($f) {
     totalRev = $f.totalRev; totalSales = $f.totalSales
     editions = @($f.editions); survDaily = @($f.survDaily)
     daily = @($f.daily); grain = @($f.grain)
-    resp = @($f.resp); respOpts = $f.respOpts
+    resp = @($f.resp); respOpts = $f.respOpts; invTiers = @($f.invTiers)
   }
 }
 
