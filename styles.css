@@ -593,6 +593,16 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .dia-pill{color:#0a0f1c;font-weight:800;padding:3px 11px;border-radius:20px;font-family:var(--display);font-size:12px;display:inline-block;min-width:62px;text-align:center}
 .dia-tbl td .muted{color:var(--muted2)}
 
+/* ===== toggle de plataforma (Todos/Meta/Google) + gráfico comparativo na Visão Diária ===== */
+.dia-platbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:2px 0 12px}
+.dia-platlab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);font-weight:700}
+.dia-platbtn{font-family:inherit;cursor:pointer;border:1px solid var(--line2);background:var(--panel2);color:var(--muted);border-radius:8px;padding:6px 15px;font-size:12.5px;font-weight:700;transition:.15s}
+.dia-platbtn:hover{color:var(--txt);border-color:var(--acc-dim)}
+.dia-platbtn.on{color:#0a0f1c;border-color:var(--acc);background:linear-gradient(160deg,var(--acc),var(--acc2))}
+.dia-platbtn.m.on{background:linear-gradient(160deg,var(--meta),#b0458b);border-color:var(--meta);color:#fff}
+.dia-platbtn.g.on{background:linear-gradient(160deg,var(--goog),#3f6fd0);border-color:var(--goog);color:#fff}
+.dia-platnote{font-size:11.5px;color:var(--muted2);margin-left:4px}
+
 /* ===== 💰 capacidade de investimento (tag 297/469/797) na aba Perfil ===== */
 .tier-thermo{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--panel3);margin:6px 0}
 .tier-thermo span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#08131f;font-family:var(--display);min-width:2px}

@@ -356,6 +356,7 @@
       if (sub === 'perfil' && hasScore) { qualityDaily($('#ch-qual-' + key), (PERFIL_G && PERFIL_G.dayArr) || []); tierDaily($('#ch-tier-' + key), TIER_G || []); wirePerfilFilters(); }
       if (sub === 'acomp' && hasScore) { qualityDaily($('#ch-acq-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); cplADaily($('#ch-accpla-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); }
       wireTrees(key);
+      mountDiaExtras();   // desenha o gráfico CPL Meta×Google + liga o toggle de plataforma (otim/v2/cap30)
       return;
     }
     var optSection = '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
@@ -1824,7 +1825,7 @@
     document.getElementById('v2Kpi').innerHTML = v2Kpis(agg);
     var daily = v2SeriesByDate(scope, rng.hi); if (!daily.length) { var bd2 = {}; scope.forEach(function (r) { var o = bd2[r.date] || (bd2[r.date] = { date: r.date, sp: 0, ld: 0, la: 0, lb: 0, lc: 0, lp: 0, ck: 0 }); o.sp += r.sp; o.ld += r.ld; o.la += r.la; o.lb += r.lb; o.lc += r.lc; o.lp += r.lp; o.ck += r.ck; }); daily = Object.keys(bd2).sort().map(function (d) { return bd2[d]; }); }
     v2Daily(document.getElementById('v2Daily'), daily);
-    var v2vi = document.getElementById('v2Visao'); if (v2vi) v2vi.innerHTML = visaoDiaria(diaAgg(scope));
+    var v2vi = document.getElementById('v2Visao'); if (v2vi) v2vi.innerHTML = visaoDiariaBody(scope);
     v2Table('v2TCamp', 'Campanhas', 'clique p/ filtrar', v2GroupBy(base, 0), 0);
     v2Lines(v2GroupBy(base, 0), 'v2LinesCamp', 0);
     var conjRows = v2Sel.camp != null ? base.filter(function (r) { return r.campaign === v2Sel.camp; }) : base;
@@ -1919,28 +1920,80 @@
      Usada na aba Otimização (v1) e na V2. Meta já vem c/ imposto no grain.
      Conv. página combinada = leads ÷ (LPV do Meta + cliques do Google).
   ===================================================================== */
+  // ----- filtro de plataforma da Visão Diária (pedido João Vitor: ver CPL só Meta / só Google, estilo SIP) -----
+  var DIA_PLAT = '';   // '' = Todos (Meta+Google) · 'm' = só Meta · 'g' = só Google
+  var DIA_G = [];      // day rows do recorte atual (p/ desenhar o gráfico comparativo após o innerHTML)
   function diaAgg(rows) {
     var by = {};
-    rows.forEach(function (r) { var o = by[r.date] || (by[r.date] = { d: r.date, sp: 0, ld: 0, im: 0, ck: 0, lp: 0, mLp: 0, gCk: 0 }); o.sp += r.sp || 0; o.ld += r.ld || 0; o.im += r.im || 0; o.ck += r.ck || 0; o.lp += r.lp || 0; if (r.plat === 'm') o.mLp += r.lp || 0; else if (r.plat === 'g') o.gCk += r.ck || 0; });
+    rows.forEach(function (r) {
+      var o = by[r.date] || (by[r.date] = { d: r.date, mSp: 0, gSp: 0, mLd: 0, gLd: 0, mIm: 0, gIm: 0, mCk: 0, gCk: 0, mLp: 0 });
+      if (r.plat === 'm') { o.mSp += r.sp || 0; o.mLd += r.ld || 0; o.mIm += r.im || 0; o.mCk += r.ck || 0; o.mLp += r.lp || 0; }
+      else if (r.plat === 'g') { o.gSp += r.sp || 0; o.gLd += r.ld || 0; o.gIm += r.im || 0; o.gCk += r.ck || 0; }
+    });
     return Object.keys(by).sort().reverse().map(function (d) { return by[d]; });   // mais recente no topo
   }
-  function diaMet(o) { return { sp: o.sp, ld: o.ld, cpl: o.ld ? o.sp / o.ld : null, cpm: o.im ? o.sp / (o.im / 1000) : null, ctr: o.im ? o.ck / o.im : null, conv: (o.mLp + o.gCk) ? o.ld / (o.mLp + o.gCk) : null }; }
-  function visaoDiaria(dayRows) {
+  function diaMet(o, plat) {
+    var sp, ld, im, ck, conv;
+    if (plat === 'm') { sp = o.mSp; ld = o.mLd; im = o.mIm; ck = o.mCk; conv = o.mLp ? o.mLd / o.mLp : null; }
+    else if (plat === 'g') { sp = o.gSp; ld = o.gLd; im = o.gIm; ck = o.gCk; conv = o.gCk ? o.gLd / o.gCk : null; }
+    else { sp = o.mSp + o.gSp; ld = o.mLd + o.gLd; im = o.mIm + o.gIm; ck = o.mCk + o.gCk; conv = (o.mLp + o.gCk) ? (o.mLd + o.gLd) / (o.mLp + o.gCk) : null; }
+    return { sp: sp, ld: ld, cpl: ld ? sp / ld : null, cpm: im ? sp / (im / 1000) : null, ctr: im ? ck / im : null, conv: conv };
+  }
+  function diaPlatBar() {
+    var opts = [{ k: '', l: '🌐 Todos' }, { k: 'm', l: 'Meta' }, { k: 'g', l: 'Google' }];
+    return '<div class="dia-platbar"><span class="dia-platlab">Plataforma:</span>' + opts.map(function (o) { return '<button class="dia-platbtn' + (o.k === 'm' ? ' m' : o.k === 'g' ? ' g' : '') + (DIA_PLAT === o.k ? ' on' : '') + '" data-plat="' + o.k + '">' + o.l + '</button>'; }).join('') + '<span class="dia-platnote">' + (DIA_PLAT === 'm' ? 'mostrando só Meta Ads (c/ imposto)' : DIA_PLAT === 'g' ? 'mostrando só Google Ads (sem imposto)' : 'Meta + Google combinados') + '</span></div>';
+  }
+  function visaoDiaria(dayRows, plat) {
     if (!dayRows.length) return '<div class="card"><div class="empty">Sem dados no período.</div></div>';
-    var ms = dayRows.map(diaMet);
+    var ms = dayRows.map(function (o) { return diaMet(o, plat); });
     var medCpl = median(ms.map(function (m) { return m.cpl; }).filter(function (x) { return x != null; }));
     var medCpm = median(ms.map(function (m) { return m.cpm; }).filter(function (x) { return x != null; }));
-    var head = '<thead><tr><th class="l">Dia</th><th>Gasto</th><th>Leads</th><th>CPL</th><th>CPM</th><th>CTR</th><th>Conv. pág.</th></tr></thead>';
+    var convLab = plat === 'g' ? 'Conv. clique' : 'Conv. pág.';
+    var head = '<thead><tr><th class="l">Dia</th><th>Gasto</th><th>Leads</th><th>CPL</th><th>CPM</th><th>CTR</th><th>' + convLab + '</th></tr></thead>';
     var body = dayRows.map(function (o, i) {
       var m = ms[i];
+      if (m.sp <= 0 && m.ld <= 0) return '';   // dia sem atividade naquela plataforma
       var cplC = m.cpl != null ? '<span class="dia-pill" style="background:' + cplColor(m.cpl, medCpl) + '">' + money(m.cpl) + '</span>' : '<span class="muted">—</span>';
       var cpmC = m.cpm != null ? '<span class="dia-pill" style="background:' + cplColor(m.cpm, medCpm) + '">' + money(m.cpm) + '</span>' : '<span class="muted">—</span>';
       return '<tr><td class="l">' + dfmt(o.d) + '</td><td>' + fBRL0(m.sp) + '</td><td>' + fInt(m.ld) + '</td><td>' + cplC + '</td><td>' + cpmC + '</td><td>' + (m.ctr != null ? fPct(m.ctr) : '—') + '</td><td>' + (m.conv != null ? fPct(m.conv) : '—') + '</td></tr>';
     }).join('');
     return '<div class="card tbl-card dia-card"><div class="tbl-scroll dia-scroll"><table class="vtbl dia-tbl">' + head + '<tbody>' + body + '</tbody></table></div></div>';
   }
+  // gráfico "CPL por dia · Meta × Google" — 2 linhas p/ comparar direto (pedido João Vitor)
+  function cplCompare(host, days) {
+    if (!host) return;
+    var pts = days.slice().sort(function (a, b) { return a.d.localeCompare(b.d); }).map(function (d) { return { d: d.d, m: d.mLd ? d.mSp / d.mLd : null, g: d.gLd ? d.gSp / d.gLd : null }; });
+    if (!pts.some(function (p) { return p.m != null || p.g != null; })) { host.innerHTML = '<div class="empty">Sem gasto no período.</div>'; return; }
+    var maxV = 0; pts.forEach(function (p) { if (p.m != null && p.m > maxV) maxV = p.m; if (p.g != null && p.g > maxV) maxV = p.g; }); if (maxV <= 0) maxV = 1;
+    var W = 860, H = 240, pl = 48, pr = 12, pt = 14, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = pts.length;
+    function xf(i) { return pl + (n > 1 ? pw / (n - 1) * i : pw / 2); } function yf(v) { return base - ph * Math.max(0, Math.min(1, v / maxV)); }
+    var META = 'var(--meta)', GOOG = 'var(--goog)';
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 0.5, 1].forEach(function (fr) { var y = pt + ph * (1 - fr); s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)" stroke-dasharray="2 3"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" fill="var(--muted2)" font-size="9">' + fBRL0(maxV * fr) + '</text>'; });
+    function line(key, col, dim) { var pp = []; pts.forEach(function (p, i) { var v = p[key]; if (v != null) pp.push([xf(i), yf(v)]); }); if (pp.length > 1) s += '<path d="M' + pp.map(function (q) { return q[0].toFixed(1) + ' ' + q[1].toFixed(1); }).join(' L') + '" fill="none" stroke="' + col + '" stroke-width="2.4" opacity="' + (dim ? 0.2 : 0.95) + '"></path>'; pp.forEach(function (q) { s += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="2.4" fill="' + col + '" opacity="' + (dim ? 0.2 : 1) + '"></circle>'; }); }
+    line('m', META, DIA_PLAT === 'g'); line('g', GOOG, DIA_PLAT === 'm');
+    v2Ticks(pts.map(function (p) { return p.d; })).forEach(function (i) { s += '<text x="' + xf(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" fill="var(--muted2)" font-size="9">' + dfmt(pts[i].d) + '</text>'; });
+    var bandW = n > 1 ? pw / (n - 1) : pw; pts.forEach(function (p, i) { var x = xf(i) - bandW / 2; if (x < pl) x = pl; s += '<rect class="v2hit" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + pt + '" width="' + bandW.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    var leg = '<div class="v2legwrap"><span class="v2leg" style="cursor:default"><span class="dot" style="background:' + META + '"></span>Meta CPL/dia</span><span class="v2leg" style="cursor:default"><span class="dot" style="background:' + GOOG + '"></span>Google CPL/dia</span></div>';
+    host.innerHTML = '<div class="v2chart">' + s + '</div>' + leg;
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) { var p = pts[+rc.getAttribute('data-i')]; showTip('<div class="tt-t">' + dfull(p.d) + ' · CPL</div><div class="tt-r"><span style="color:' + META + '">Meta</span><b>' + (p.m != null ? money(p.m) : '—') + '</b></div><div class="tt-r"><span style="color:' + GOOG + '">Google</span><b>' + (p.g != null ? money(p.g) : '—') + '</b></div>', e); });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+  }
+  function visaoDiariaBody(rows) {
+    var days = diaAgg(rows); DIA_G = days;
+    return diaPlatBar() +
+      '<div class="chart-card" style="margin-bottom:12px"><div class="chart-head"><h4>📈 CPL por dia · Meta × Google</h4><div class="legend" style="color:var(--muted2);font-size:11px">compare o andamento das duas plataformas</div></div><div id="ch-cplcmp"></div></div>' +
+      visaoDiaria(days, DIA_PLAT);
+  }
   function visaoDiariaSection(rows) {
-    return '<div class="section-title">📅 Visão diária <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· uma linha por dia (mais recente no topo) · CPL e CPM verde (bom) → vermelho (caro) vs. mediana do período</span><span class="st-line"></span></div>' + visaoDiaria(diaAgg(rows));
+    return '<div class="section-title">📅 Visão diária <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· uma linha por dia (mais recente no topo) · filtre por plataforma · CPL/CPM verde (bom) → vermelho (caro) vs. mediana</span><span class="st-line"></span></div>' + visaoDiariaBody(rows);
+  }
+  function mountDiaExtras() {
+    var host = document.getElementById('ch-cplcmp'); if (host) cplCompare(host, DIA_G);
+    Array.prototype.forEach.call(document.querySelectorAll('.dia-platbtn'), function (b) { b.addEventListener('click', function () { DIA_PLAT = b.getAttribute('data-plat'); renderFunnel(CUR); }); });
   }
 
   /* =====================================================================
