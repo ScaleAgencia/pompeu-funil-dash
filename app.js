@@ -296,7 +296,7 @@
   function renderFunnel(key) {
     var f = D[key], st = STATE[key];
     var pb = $('#pb-' + key);
-    if (pb) pb.style.display = (DSUB === 'v2') ? 'none' : '';   // V2 tem seu próprio seletor de período (o atributo hidden não vence o display:flex do CSS)
+    if (pb) pb.style.display = (DSUB === 'v2' || loteByKey(DSUB)) ? 'none' : '';   // V2 e lotes têm janela própria (o atributo hidden não vence o display:flex do CSS)
     Array.prototype.forEach.call(pb.querySelectorAll('.preset'), function (b) { b.classList.toggle('active', b.getAttribute('data-p') === st.preset); });
     $('#dl-' + key).value = st.lo; $('#dh-' + key).value = st.hi;
     var edBtn = $('#edbtn-' + key);
@@ -335,6 +335,8 @@
         dview = orgLeadsView(st.lo, st.hi);
       } else if (sub === 'cap30') {
         dview = cap30View(st.lo, st.hi);
+      } else if (loteByKey(sub)) {
+        dview = loteView(sub);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
@@ -348,7 +350,7 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || loteByKey(sub) || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
@@ -2000,16 +2002,55 @@
      🚀 CAPTAÇÃO 30/09 — funil novo (D.cap30): gasto+leads só a partir de 30/09,
      cruzando queries YOUTUBE_LIVE com os leads NOVOS da aba v9. Captação (CPL).
   ===================================================================== */
-  function cap30View(lo, hi) {
-    var fc = D.cap30;
-    if (!fc || !arr(fc.grain).length) return '<div class="empty" style="padding:56px 20px">Sem dados de captação a partir de 30/09 ainda.<br><span style="color:var(--muted2);font-size:12px">Cruza as queries YOUTUBE_LIVE (gasto ≥ 30/09) com os leads novos da aba <b>v9</b> · atualiza a cada 3h.</span></div>';
+  // view de captação genérica (banner + KPIs + Visão Diária c/ filtro plataforma + árvore) p/ uma janela [lo,hi]
+  function captacaoView(fc, lo, hi, banner, emptyMsg, extraTop) {
+    if (!fc || !arr(fc.grain).length) return '<div class="empty" style="padding:56px 20px">' + (emptyMsg || 'Sem dados ainda.') + '</div>';
     var a = agg(fc, lo, hi);
     var rows = grainRows(fc).filter(function (r) { return r.date >= lo && r.date <= hi; });
-    var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
-    return banner + kpiRow('cap30', a, false) +
+    if (!rows.length) return banner + (extraTop || '') + '<div class="empty" style="padding:50px 20px">Nenhum gasto/lead nesse período ainda. (atualiza a cada 3h)</div>';
+    return banner + (extraTop || '') + kpiRow(fc.key, a, false) +
       visaoDiariaSection(rows) +
       '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM · campanha › conjunto › anúncio</span><span class="st-line"></span></div>' +
       '<div class="opt-cols">' + optColDaily(fc, 'g', lo, hi, 'cpl') + optColDaily(fc, 'm', lo, hi, 'cpl') + '</div>';
+  }
+  function cap30View(lo, hi) {
+    var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
+    return captacaoView(D.cap30, lo, hi, banner, 'Sem dados de captação a partir de 30/09 ainda. · atualiza a cada 3h.');
+  }
+  /* ===== LOTES semanais (qua → ter 15h) — pedido Erick: cada semana = uma aba (S2, S3, ...).
+     Janela de data do funil live (que já tem v8+v9). Adicionar lote novo = 1 linha no array.
+     ⚠️ dados são por DIA, então a virada de 15h da terça é aproximada p/ o dia todo (a terça inteira
+        fica no lote que encerra). Leads e gasto da terça contam no lote que termina. ===== */
+  var LOTES = [
+    { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 }
+  ];
+  function loteGoalPanel(a, L) {
+    if (!L.goal) return '';
+    var spent = a.spend || 0, goal = L.goal, pct = goal ? spent / goal : 0, rem = Math.max(0, goal - spent);
+    var dtot = Math.round((new Date(L.to + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
+    var today = (D.live && D.live.leadMax) || L.to; if (today > L.to) today = L.to; if (today < L.from) today = L.from;
+    var delap = Math.round((new Date(today + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
+    var dleft = Math.max(0, dtot - delap);
+    var expected = goal * delap / dtot, ratio = expected ? spent / expected : 1;
+    var st = ratio >= 0.98 ? { c: 'var(--teal)', t: 'no ritmo ✓' } : ratio >= 0.85 ? { c: 'var(--gold)', t: 'quase no ritmo' } : { c: 'var(--red)', t: 'atrás do ritmo' };
+    var perDay = dleft > 0 ? rem / dleft : 0;
+    var barPct = Math.min(100, pct * 100).toFixed(1);
+    return '<div class="card lote-goal">' +
+      '<div class="lg-top"><div class="klabel">🎯 Meta de investimento · ' + esc(L.label) + '</div><div class="lg-pct" style="color:' + st.c + '">' + fPct(pct, 0) + '</div></div>' +
+      '<div class="lg-val"><b>' + fBRL0(spent) + '</b> <span class="muted">de ' + fBRL0(goal) + '</span></div>' +
+      '<div class="goalbar lg-bar"><i style="width:' + barPct + '%;background:' + st.c + '"></i><span class="lg-mark" style="left:' + Math.min(100, delap / dtot * 100).toFixed(1) + '%" title="ritmo esperado hoje"></span></div>' +
+      '<div class="ksub lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span><span>faltam <b class="kv">' + fBRL0(rem) + '</b></span>' + (dleft > 0 ? '<span>' + dleft + ' dia' + (dleft > 1 ? 's' : '') + ' · ~' + fBRL0(perDay) + '/dia p/ bater</span>' : '<span>lote encerrado</span>') + '</div>' +
+      '</div>';
+  }
+  function loteByKey(k) { for (var i = 0; i < LOTES.length; i++) if (LOTES[i].key === k) return LOTES[i]; return null; }
+  // lote = janela de data do funil cap30 (captação v9 dedupada, fonte certa p/ as semanas atuais); key própria p/ sort/expand independente
+  function loteFn(key) { var f = (D.cap30 && arr(D.cap30.grain).length) ? D.cap30 : D.live; return { key: key, grain: f.grain, daily: f.daily }; }
+  function loteView(key) {
+    var L = loteByKey(key); if (!L) return '';
+    var fc = loteFn(key);
+    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L) : '';
+    var banner = '<div class="banner" style="margin-bottom:14px">🗓️ <div><b>' + esc(L.label) + '</b> — lote de captação <b>' + L.de + '</b> → <b>' + L.ate + '</b>. Conta o gasto e os leads <b>só desse período</b> (queries YOUTUBE_LIVE × leads, Meta + Google). Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">A virada do lote é na terça à tarde; como os dados são diários, a terça inteira entra no lote que encerra.</span></div></div>';
+    return captacaoView(fc, L.from, L.to, banner, 'Sem dados nesse lote ainda.', goalHtml);
   }
 
   /* =====================================================================
@@ -2019,6 +2060,7 @@
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1 };
+    LOTES.forEach(function (L) { subs[L.key] = 1; });
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
@@ -2040,6 +2082,17 @@
     if (!mounted[fk]) { mounted[fk] = true; mountFunnel(fk); } else renderFunnel(fk);
     window.scrollTo(0, 0);
   }
+  // injeta as abas de lote dinamicamente (S2, S3, ... = 1 linha no array LOTES, sem mexer no HTML)
+  (function () {
+    var nav = document.getElementById('mainTabs'); if (!nav) return;
+    var anchor = nav.querySelector('.tab[data-tab="cap30"]');
+    LOTES.forEach(function (L) {
+      if (nav.querySelector('.tab[data-tab="' + L.key + '"]')) return;
+      var b = document.createElement('button'); b.className = 'tab tab-lote'; b.setAttribute('data-tab', L.key); b.textContent = '🗓️ ' + L.label;
+      if (anchor && anchor.nextSibling) nav.insertBefore(b, anchor.nextSibling); else nav.appendChild(b);
+      anchor = b;
+    });
+  })();
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
   Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fn-btn'), function (b) { b.addEventListener('click', function () { switchFunnel(b.getAttribute('data-f')); }); });
   window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });

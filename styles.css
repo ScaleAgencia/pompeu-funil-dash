@@ -603,6 +603,19 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .dia-platbtn.g.on{background:linear-gradient(160deg,var(--goog),#3f6fd0);border-color:var(--goog);color:#fff}
 .dia-platnote{font-size:11.5px;color:var(--muted2);margin-left:4px}
 
+/* ===== 🎯 painel de meta de investimento (abas de lote S2/S3/...) ===== */
+.lote-goal{margin-bottom:14px;background:linear-gradient(150deg,rgba(87,230,255,.11),rgba(167,139,250,.07) 60%,rgba(12,15,30,.9));border-color:rgba(87,230,255,.22)}
+.lote-goal .lg-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.lg-pct{font-family:var(--display);font-weight:800;font-size:22px;line-height:1}
+.lg-val{font-family:var(--display);font-size:25px;font-weight:700;margin:8px 0 2px}
+.lg-val .muted{font-size:15px;color:var(--muted2);font-weight:600}
+.goalbar.lg-bar{height:12px;border-radius:7px;margin-top:8px;position:relative}
+.goalbar.lg-bar>i{border-radius:7px;transition:width .3s}
+.lg-mark{position:absolute;top:-2px;width:2px;height:16px;background:var(--txt);opacity:.5;border-radius:2px}
+.lg-sub{margin-top:10px;gap:8px 18px}
+.lg-sub .kv{color:var(--txt);font-weight:700}
+.tab-lote{position:relative}
+
 /* ===== 💰 capacidade de investimento (tag 297/469/797) na aba Perfil ===== */
 .tier-thermo{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--panel3);margin:6px 0}
 .tier-thermo span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#08131f;font-family:var(--display);min-width:2px}
