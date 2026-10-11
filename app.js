@@ -296,7 +296,7 @@
   function renderFunnel(key) {
     var f = D[key], st = STATE[key];
     var pb = $('#pb-' + key);
-    if (pb) pb.style.display = (DSUB === 'v2' || loteByKey(DSUB)) ? 'none' : '';   // V2 e lotes têm janela própria (o atributo hidden não vence o display:flex do CSS)
+    if (pb) pb.style.display = (DSUB === 'v2') ? 'none' : '';   // V2 tem seletor próprio; lotes usam a barra de período (limitada à janela do lote)
     Array.prototype.forEach.call(pb.querySelectorAll('.preset'), function (b) { b.classList.toggle('active', b.getAttribute('data-p') === st.preset); });
     $('#dl-' + key).value = st.lo; $('#dh-' + key).value = st.hi;
     var edBtn = $('#edbtn-' + key);
@@ -336,7 +336,7 @@
       } else if (sub === 'cap30') {
         dview = cap30View(st.lo, st.hi);
       } else if (loteByKey(sub)) {
-        dview = loteView(sub);
+        dview = loteView(sub, st.lo, st.hi);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
@@ -2041,7 +2041,7 @@
       '<div class="lg-top"><div class="klabel">🎯 Meta de investimento · ' + esc(L.label) + '</div><div class="lg-pct" style="color:' + st.c + '">' + fPct(pct, 0) + '</div></div>' +
       '<div class="lg-val"><b>' + fBRL0(spent) + '</b> <span class="muted">de ' + fBRL0(goal) + '</span></div>' +
       '<div class="goalbar lg-bar"><i style="width:' + barPct + '%;background:' + st.c + '"></i><span class="lg-mark" style="left:' + Math.min(100, delap / dtot * 100).toFixed(1) + '%" title="ritmo esperado hoje"></span></div>' +
-      '<div class="lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span> <span class="muted">·</span> <span>faltam <b class="kv">' + fBRL0(rem) + '</b>' + (dleft > 0 ? ' em <b class="kv">' + dleft + ' dia' + (dleft > 1 ? 's' : '') + '</b> (até 13/10)' : ' · lote encerrado') + '</span></div>' +
+      '<div class="lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span> <span class="muted">·</span> <span>faltam <b class="kv">' + fBRL0(rem) + '</b>' + (dleft > 0 ? ' em <b class="kv">' + dleft + ' dia' + (dleft > 1 ? 's' : '') + '</b> (até ' + dfmt(L.to) + ')' : ' · lote encerrado') + '</span></div>' +
       '<div class="lg-stats">' +
       '<div class="lg-stat"><div class="lg-stat-l">📊 Ritmo atual</div><div class="lg-stat-v">' + fBRL0(ritmoAtual) + '<span>/dia</span></div><div class="lg-stat-s">' + fInt(delap) + ' dia' + (delap > 1 ? 's' : '') + ' rodando</div></div>' +
       (dleft > 0
@@ -2054,12 +2054,20 @@
   function loteByKey(k) { for (var i = 0; i < LOTES.length; i++) if (LOTES[i].key === k) return LOTES[i]; return null; }
   // lote = janela de data do funil cap30 (captação v9 dedupada, fonte certa p/ as semanas atuais); key própria p/ sort/expand independente
   function loteFn(key) { var f = (D.cap30 && arr(D.cap30.grain).length) ? D.cap30 : D.live; return { key: key, grain: f.grain, daily: f.daily }; }
-  function loteView(key) {
+  function loteView(key, lo, hi) {
     var L = loteByKey(key); if (!L) return '';
     var fc = loteFn(key);
-    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L) : '';
-    var banner = '<div class="banner" style="margin-bottom:14px">🗓️ <div><b>' + esc(L.label) + '</b> — lote de captação <b>' + L.de + '</b> → <b>' + L.ate + '</b>. Conta o gasto e os leads <b>só desse período</b> (queries YOUTUBE_LIVE × leads, Meta + Google). Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">A virada do lote é na terça à tarde; como os dados são diários, a terça inteira entra no lote que encerra.</span></div></div>';
-    return captacaoView(fc, L.from, L.to, banner, 'Sem dados nesse lote ainda.', goalHtml);
+    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L) : '';   // meta SEMPRE sobre o lote cheio
+    // filtro de data da barra de período, limitado à janela do lote
+    var leadMax = (D.live && D.live.leadMax) || L.to;
+    var natTo = L.to < leadMax ? L.to : leadMax;   // fim NATURAL do lote (não passa de hoje)
+    var from = L.from, to = L.to;
+    if (lo && lo > from) from = lo;
+    if (hi && hi < to) to = hi;
+    if (from > to) { from = L.from; to = L.to; }   // range fora da janela -> volta ao lote cheio
+    var filt = (from > L.from || to < natTo) ? ' <b style="color:var(--acc)">· filtrado ' + dfmt(from) + '–' + dfmt(to) + '</b>' : '';
+    var banner = '<div class="banner" style="margin-bottom:14px">🗓️ <div><b>' + esc(L.label) + '</b> — lote de captação <b>' + L.de + '</b> → <b>' + L.ate + '</b>' + filt + '. Conta o gasto e os leads <b>só desse período</b> (queries YOUTUBE_LIVE × leads, Meta + Google). Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">Use a barra de período acima pra filtrar dias dentro do lote. A virada é na terça à tarde; como os dados são diários, a terça inteira entra no lote que encerra.</span></div></div>';
+    return captacaoView(fc, from, to, banner, 'Sem dados nesse lote ainda.', goalHtml);
   }
 
   /* =====================================================================
