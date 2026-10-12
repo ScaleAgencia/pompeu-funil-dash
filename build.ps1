@@ -968,23 +968,22 @@ $matCut = $nowBR.AddDays(-4).ToString('yyyy-MM-dd')
 $validation = Compute-Validation @((Join-Path $dataDir 'terca_pesq.csv'), (Join-Path $dataDir 'segunda_pesq.csv'), (Join-Path $dataDir 'diario_pesq.csv'), (Join-Path $dataDir 'live_pesq.csv')) $script:FDI_BUYERS $matCut
 Write-Host ("   validacao: {0} leads maturados, {1} compradores | Quente {2}/{3} Morno {4}/{5} Frio {6}/{7}" -f $validation.leads, $validation.buyers, $validation.tier.q.b, $validation.tier.q.n, $validation.tier.m.b, $validation.tier.m.n, $validation.tier.f.b, $validation.tier.f.n)
 # ============================================================================
-#  LEADS ORGANICOS + INFLUENCER (pedido Enrico 28/09) — visao a parte do funil pago.
-#  Chegam na MESMA aba v8 (ja baixada em data/live_leads.csv pelo Build-Funnel 'live'),
-#  com Tag = WBN-2026-ORG (organico) ou WBN-2026-INFLUENCER. utm_campaign vazio -> NAO
-#  entram no funil YOUTUBE_LIVE. Quebra por utm_source (instagram/manychat/youtube/...).
-#  Dedup por email (1a ocorrencia por data), agrega por dia + fonte.
+#  LEADS: ORGANICO x TRAFEGO (pago) — pedido Erick 12/10. Le v8 (live_leads.csv) + v9
+#  (live_leads2.csv). Classifica cada lead: PAGO = utm_campaign contem YOUTUBE_LIVE
+#  (Facebook-Ads/google-ads do funil); ORGANICO = o resto (medium=organico: instagram/
+#  manychat/youtube + influencers mineirinho/wladir/...). Dedup por email (1a data),
+#  agrega por dia: {d, paid, org, s:{fonte organica -> n}}.
+#  ⚠️ as tags antigas WBN-2026-ORG/INFLUENCER pararam em 30/09 -> agora separa por
+#     utm_campaign (YOUTUBE_LIVE=pago), igual o leadCampMust do funil.
 # ============================================================================
 function Build-OrgLeads {
-  $csv = Join-Path $dataDir 'live_leads.csv'
-  if (-not (Test-Path $csv)) { Write-Host "   [orgLeads] live_leads.csv ausente -> pulado"; return $null }
-  $rows = @(Import-Csv $csv)
-  if ($rows.Count -eq 0) { return $null }
+  $rows = @()
+  foreach ($fn in @('live_leads.csv', 'live_leads2.csv')) { $p = Join-Path $dataDir $fn; if (Test-Path $p) { $rows += @(Import-Csv $p) } }
+  if ($rows.Count -eq 0) { Write-Host "   [leadsMix] sem csv -> pulado"; return $null }
   $cols = $rows[0].PSObject.Properties.Name
-  $cEmail = $cols[1]; $cTag = $cols[3]; $cSrc = $cols[4]; $cTs = $cols[9]
+  $cEmail = $cols[1]; $cSrc = $cols[4]; $cCamp = $cols[6]; $cTs = $cols[9]
   $recs = New-Object System.Collections.Generic.List[object]
   foreach ($r in $rows) {
-    $tag = [string]$r.$cTag
-    if ($tag -notmatch '^WBN-2026-(ORG|INFLU)') { continue }
     $ts = [string]$r.$cTs
     if ($ts.Length -lt 10) { continue }
     $dp = $ts.Substring(0, 10)
@@ -992,27 +991,32 @@ function Build-OrgLeads {
     elseif ($dp.Length -ge 10 -and $dp[4] -eq '-') { $iso = $dp }
     else { continue }
     $em = ([string]$r.$cEmail).Trim().ToLowerInvariant()
+    $campN = (([string]$r.$cCamp) -replace '[-_ |]', '').ToUpperInvariant()   # normaliza (CampNorm e interno do Build-Funnel)
+    $paid = $campN.Contains('YOUTUBELIVE')   # pago = funil YOUTUBE_LIVE
     $src = ([string]$r.$cSrc).Trim().ToLowerInvariant(); if ($src -eq '') { $src = '(sem origem)' }
-    $recs.Add([pscustomobject]@{ iso = $iso; em = $em; src = $src; inf = ($tag -match 'INFLU') })
+    $recs.Add([pscustomobject]@{ iso = $iso; em = $em; src = $src; paid = $paid })
   }
-  if ($recs.Count -eq 0) { return @{ total = 0; org = 0; infl = 0; sources = @(); daily = @() } }
+  if ($recs.Count -eq 0) { return @{ total = 0; paid = 0; org = 0; sources = @(); daily = @() } }
   $recs = @($recs | Sort-Object iso)   # mantem a 1a data ao deduplicar
   $seen = New-Object 'System.Collections.Generic.HashSet[string]'
-  $days = @{}; $srcTot = @{}; $tot = 0; $org = 0; $inf = 0; $dup = 0
+  $days = @{}; $srcTot = @{}; $tot = 0; $paidT = 0; $orgT = 0; $dup = 0
   foreach ($rec in $recs) {
     if ($rec.em -ne '' -and $rec.em.IndexOf('@') -ge 0) { if (-not $seen.Add($rec.em)) { $dup++; continue } }
-    $d = $days[$rec.iso]; if ($null -eq $d) { $d = @{ d = $rec.iso; n = 0; o = 0; i = 0; s = @{} }; $days[$rec.iso] = $d }
-    $d.n++; $tot++
-    if ($rec.inf) { $d.i++; $inf++ } else { $d.o++; $org++ }
-    if (-not $d.s.ContainsKey($rec.src)) { $d.s[$rec.src] = 0 }
-    $d.s[$rec.src]++
-    if (-not $srcTot.ContainsKey($rec.src)) { $srcTot[$rec.src] = 0 }
-    $srcTot[$rec.src]++
+    $d = $days[$rec.iso]; if ($null -eq $d) { $d = @{ d = $rec.iso; paid = 0; org = 0; s = @{} }; $days[$rec.iso] = $d }
+    $tot++
+    if ($rec.paid) { $d.paid++; $paidT++ }
+    else {
+      $d.org++; $orgT++
+      if (-not $d.s.ContainsKey($rec.src)) { $d.s[$rec.src] = 0 }
+      $d.s[$rec.src]++
+      if (-not $srcTot.ContainsKey($rec.src)) { $srcTot[$rec.src] = 0 }
+      $srcTot[$rec.src]++
+    }
   }
   $daily = @($days.Keys | Sort-Object | ForEach-Object { $days[$_] })
   $sources = @($srcTot.Keys | Sort-Object { $srcTot[$_] } -Descending | ForEach-Object { @{ k = $_; n = $srcTot[$_] } })
-  Write-Host "   [orgLeads] $tot leads (org $org + infl $inf) · dedup -$dup · $($sources.Count) fontes · $($daily.Count) dias"
-  return @{ total = $tot; org = $org; infl = $inf; sources = $sources; daily = $daily }
+  Write-Host "   [leadsMix] $tot leads (trafego $paidT + organico $orgT) · dedup -$dup · $($sources.Count) fontes org · $($daily.Count) dias"
+  return @{ total = $tot; paid = $paidT; org = $orgT; sources = $sources; daily = $daily }
 }
 $orgLeads = Build-OrgLeads
 

@@ -1845,72 +1845,78 @@
   ===================================================================== */
   var ORG_G = { days: [], topN: [], srcColor: {} };
   var ORG_OUTRAS = '#5a6784';
+  var ORG_PAID = '#57e6ff';   // tráfego (pago)
   function orgLeadsView(lo, hi) {
     var O = D.orgLeads;
-    if (!O || !arr(O.daily).length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Ainda não há leads orgânicos / influencer registrados.<br><span style="color:var(--muted2);font-size:12px">Chegam na aba <b>v8</b> com tag <b>WBN-2026-ORG</b> ou <b>WBN-2026-INFLUENCER</b> · atualiza a cada 3h.</span></div>'; }
+    if (!O || !arr(O.daily).length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Ainda não há leads registrados.<br><span style="color:var(--muted2);font-size:12px">Cruza v8 + v9 · atualiza a cada 3h.</span></div>'; }
     var days = arr(O.daily).filter(function (d) { return d.d >= lo && d.d <= hi; });
-    if (!days.length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Sem leads orgânicos / influencer no período selecionado.</div>'; }
-    var tot = 0, org = 0, infl = 0, srcTot = {};
-    days.forEach(function (d) { tot += d.n; org += d.o; infl += d.i; var s = d.s || {}; Object.keys(s).forEach(function (k) { srcTot[k] = (srcTot[k] || 0) + s[k]; }); });
+    if (!days.length) { ORG_G = { days: [], topN: [], srcColor: {} }; return '<div class="empty" style="padding:56px 20px">Sem leads no período selecionado.</div>'; }
+    var totPaid = 0, totOrg = 0, srcTot = {};
+    days.forEach(function (d) { totPaid += d.paid || 0; totOrg += d.org || 0; var s = d.s || {}; Object.keys(s).forEach(function (k) { srcTot[k] = (srcTot[k] || 0) + s[k]; }); });
+    var total = totPaid + totOrg;
     var sources = Object.keys(srcTot).map(function (k) { return { k: k, n: srcTot[k] }; }).sort(function (a, b) { return b.n - a.n; });
     var topSrc = sources[0];
     var topN = sources.slice(0, 6).map(function (s) { return s.k; });
     var srcColor = {}; topN.forEach(function (k, i) { srcColor[k] = V2PAL[i % V2PAL.length]; });
     ORG_G = { days: days, topN: topN, srcColor: srcColor };
-    var bestDay = days.slice().sort(function (a, b) { return b.n - a.n; })[0];
-    // hero
-    var hero = '<div class="card kpi hero org-hero"><div class="klabel">🌱 Leads orgânicos + influencer</div>' +
-      '<div class="kval">' + fInt(tot) + '</div>' +
+    var ORGC = '#34e5b0';
+    // hero: tráfego × orgânico
+    var hero = '<div class="card kpi hero org-hero"><div class="klabel">👥 Leads captados · por origem</div>' +
+      '<div class="kval">' + fInt(total) + '</div>' +
       '<div class="org-thermo">' +
-      (org > 0 ? '<span style="width:' + (org / tot * 100).toFixed(1) + '%;background:var(--teal)" title="Orgânico">' + (org / tot > 0.08 ? fInt(org) : '') + '</span>' : '') +
-      (infl > 0 ? '<span style="width:' + (infl / tot * 100).toFixed(1) + '%;background:var(--acc2)" title="Influencer">' + (infl / tot > 0.05 ? fInt(infl) : '') + '</span>' : '') +
+      (totPaid > 0 ? '<span style="width:' + (totPaid / total * 100).toFixed(1) + '%;background:' + ORG_PAID + '" title="Tráfego pago">' + (totPaid / total > 0.06 ? fInt(totPaid) : '') + '</span>' : '') +
+      (totOrg > 0 ? '<span style="width:' + (totOrg / total * 100).toFixed(1) + '%;background:' + ORGC + '" title="Orgânico">' + (totOrg / total > 0.06 ? fInt(totOrg) : '') + '</span>' : '') +
       '</div>' +
-      '<div class="ksub"><span><span class="dot" style="background:var(--teal)"></span>Orgânico <span class="kv">' + fInt(org) + '</span></span>' +
-      '<span><span class="dot" style="background:var(--acc2)"></span>Influencer <span class="kv">' + fInt(infl) + '</span></span>' +
-      (topSrc ? '<span>fonte líder <span class="kv">' + esc(pretty(topSrc.k)) + '</span> (' + fInt(topSrc.n) + ')</span>' : '') + '</div></div>';
+      '<div class="ksub"><span><span class="dot" style="background:' + ORG_PAID + '"></span>Tráfego (pago) <span class="kv">' + fInt(totPaid) + '</span> · ' + fPct(totPaid / (total || 1), 0) + '</span>' +
+      '<span><span class="dot" style="background:' + ORGC + '"></span>Orgânico <span class="kv">' + fInt(totOrg) + '</span> · ' + fPct(totOrg / (total || 1), 0) + '</span></div></div>';
     var kpis = '<div class="kpi-row">' + hero +
-      card3('🌱 Orgânico', fInt(org), '<span>' + fPct(org / (tot || 1), 0) + ' do total</span>') +
-      card3('🤝 Influencer', fInt(infl), '<span>' + fPct(infl / (tot || 1), 0) + ' do total</span>') + '</div>';
-    // fontes (barras por utm_source)
+      card3('🎯 Tráfego (pago)', fInt(totPaid), '<span>' + fPct(totPaid / (total || 1), 0) + ' do total</span><span>campanha YOUTUBE_LIVE</span>') +
+      card3('🌱 Orgânico', fInt(totOrg), '<span>' + fPct(totOrg / (total || 1), 0) + ' do total</span><span>líder ' + (topSrc ? esc(pretty(topSrc.k)) : '—') + '</span>') + '</div>';
+    var banner = '<div class="banner" style="margin:12px 0">👥 <div><b>Tráfego (pago)</b> = leads da campanha <b>YOUTUBE_LIVE</b> (Meta + Google Ads). <b>Orgânico</b> = demais origens — instagram, manychat, youtube orgânico e influencers — quebrado por <b>utm_source</b>. Deduplicado por email; cruza <b>v8 + v9</b>.</div></div>';
+    // fontes do orgânico (barras por utm_source)
     var maxSrc = sources.length ? sources[0].n : 1;
-    var srcRows = sources.map(function (s, i) { var col = i < topN.length ? srcColor[s.k] : ORG_OUTRAS; return '<div class="orgsrc"><span class="orgsrc-k"><span class="dot" style="background:' + col + '"></span>' + esc(pretty(s.k)) + '</span><span class="orgsrc-bar"><i style="width:' + Math.max(2, s.n / maxSrc * 100).toFixed(1) + '%;background:' + col + '"></i></span><span class="orgsrc-n">' + fInt(s.n) + '</span><span class="orgsrc-p">' + fPct(s.n / (tot || 1), 0) + '</span></div>'; }).join('');
-    var srcSection = '<div class="section-title">Fontes de captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· por utm_source · ' + fInt(sources.length) + ' fontes</span><span class="st-line"></span></div><div class="card"><div class="orgsrc-list">' + srcRows + '</div></div>';
-    // diario
-    var dailySection = '<div class="section-title">Leads por dia <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· empilhado por fonte · passe o mouse</span><span class="st-line"></span></div><div class="chart-card"><div id="ch-org"></div></div>';
+    var srcRows = sources.length ? sources.map(function (s, i) { var col = i < topN.length ? srcColor[s.k] : ORG_OUTRAS; return '<div class="orgsrc"><span class="orgsrc-k"><span class="dot" style="background:' + col + '"></span>' + esc(pretty(s.k)) + '</span><span class="orgsrc-bar"><i style="width:' + Math.max(2, s.n / maxSrc * 100).toFixed(1) + '%;background:' + col + '"></i></span><span class="orgsrc-n">' + fInt(s.n) + '</span><span class="orgsrc-p">' + fPct(s.n / (totOrg || 1), 0) + '</span></div>'; }).join('') : '<div class="empty">Sem leads orgânicos no período.</div>';
+    var srcSection = '<div class="section-title">Fontes do orgânico <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· por utm_source · % do orgânico · ' + fInt(sources.length) + ' fontes</span><span class="st-line"></span></div><div class="card"><div class="orgsrc-list">' + srcRows + '</div></div>';
+    var dailySection = '<div class="section-title">Leads por dia · tráfego × orgânico <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· barra = tráfego + fontes orgânicas empilhadas · passe o mouse</span><span class="st-line"></span></div><div class="chart-card"><div id="ch-org"></div></div>';
     // tabela
     var tblBody = days.slice().sort(function (a, b) { return b.d.localeCompare(a.d); }).map(function (d) {
       var t = Object.keys(d.s || {}).map(function (k) { return { k: k, n: d.s[k] }; }).sort(function (a, b) { return b.n - a.n; })[0];
-      return '<tr><td class="l">' + dfull(d.d) + '</td><td>' + fInt(d.n) + '</td><td>' + fInt(d.o) + '</td><td>' + fInt(d.i) + '</td><td class="l">' + (t ? esc(pretty(t.k)) + ' <span class="muted">(' + fInt(t.n) + ')</span>' : '—') + '</td></tr>';
+      var dt = (d.paid || 0) + (d.org || 0);
+      return '<tr><td class="l">' + dfull(d.d) + '</td><td>' + fInt(dt) + '</td><td>' + fInt(d.paid || 0) + '</td><td>' + fInt(d.org || 0) + '</td><td class="l">' + (t ? esc(pretty(t.k)) + ' <span class="muted">(' + fInt(t.n) + ')</span>' : '—') + '</td></tr>';
     }).join('');
-    var tblSection = '<div class="section-title">Detalhe diário <span class="st-line"></span></div><div class="card tbl-card"><div class="tbl-scroll"><table class="vtbl v2tbl orgtbl"><thead><tr><th class="l">Dia</th><th>Leads</th><th>Orgânico</th><th>Influencer</th><th class="l">Fonte líder do dia</th></tr></thead><tbody>' + tblBody + '</tbody></table></div></div>';
-    return kpis + srcSection + dailySection + tblSection;
+    var tblSection = '<div class="section-title">Detalhe diário <span class="st-line"></span></div><div class="card tbl-card"><div class="tbl-scroll"><table class="vtbl v2tbl orgtbl"><thead><tr><th class="l">Dia</th><th>Leads</th><th>Tráfego</th><th>Orgânico</th><th class="l">Fonte orgânica líder</th></tr></thead><tbody>' + tblBody + '</tbody></table></div></div>';
+    return kpis + banner + srcSection + dailySection + tblSection;
   }
   function orgDaily(host, days, topN, srcColor) {
     if (!host) return;
     if (!days.length) { host.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
     var W = 860, H = 240, pl = 40, pr = 12, pt = 12, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = days.length;
-    var maxN = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1]));
+    var maxN = Math.max.apply(null, days.map(function (d) { return (d.paid || 0) + (d.org || 0); }).concat([1]));
     var bw = pw / n, bar = Math.min(bw * 0.62, 34); function xc(i) { return pl + bw * i + bw / 2; }
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
     [0, 1, 2, 3].forEach(function (k) { var y = pt + ph * k / 3; s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" font-size="9" fill="var(--muted2)">' + fInt(Math.round(maxN * (3 - k) / 3)) + '</text>'; });
     days.forEach(function (d, i) {
-      var yTop = base, used = 0;
-      topN.forEach(function (k) { var v = (d.s && d.s[k]) || 0; used += v; if (v > 0) { var h = v / maxN * ph; yTop -= h; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + srcColor[k] + '" opacity=".9"></rect>'; } });
-      var outras = d.n - used; if (outras > 0) { var h2 = outras / maxN * ph; yTop -= h2; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h2.toFixed(1) + '" fill="' + ORG_OUTRAS + '" opacity=".9"></rect>'; }
+      var yTop = base;
+      function seg(v, col) { if (v > 0) { var h = v / maxN * ph; yTop -= h; s += '<rect x="' + (xc(i) - bar / 2).toFixed(1) + '" y="' + yTop.toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + col + '" opacity=".9"></rect>'; } }
+      seg(d.paid || 0, ORG_PAID);   // tráfego embaixo
+      var usedOrg = 0;
+      topN.forEach(function (k) { var v = (d.s && d.s[k]) || 0; usedOrg += v; seg(v, srcColor[k]); });
+      seg((d.org || 0) - usedOrg, ORG_OUTRAS);   // outras fontes orgânicas
     });
     v2Ticks(days.map(function (d) { return d.d; })).forEach(function (i) { s += '<text x="' + xc(i).toFixed(1) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" fill="var(--muted2)">' + dfmt(days[i].d) + '</text>'; });
     days.forEach(function (d, i) { s += '<rect class="v2hit" data-i="' + i + '" x="' + (pl + bw * i).toFixed(1) + '" y="' + pt + '" width="' + bw.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
     s += '</svg>';
-    var leg = topN.map(function (k) { return '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + srcColor[k] + '"></span>' + esc(pretty(k)) + '</span>'; }).join('') + '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + ORG_OUTRAS + '"></span>outros</span>';
+    var leg = '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + ORG_PAID + '"></span>Tráfego (pago)</span>' + topN.map(function (k) { return '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + srcColor[k] + '"></span>' + esc(pretty(k)) + '</span>'; }).join('') + '<span class="v2leg" style="cursor:default"><span class="dot" style="background:' + ORG_OUTRAS + '"></span>outras org.</span>';
     host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap">' + leg + '</div>';
     Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
       rc.addEventListener('mousemove', function (e) {
-        var d = days[+rc.getAttribute('data-i')], items = [], used = 0;
+        var d = days[+rc.getAttribute('data-i')], items = [], used = 0, dt = (d.paid || 0) + (d.org || 0);
+        if ((d.paid || 0) > 0) items.push(['Tráfego (pago)', d.paid, ORG_PAID]);
         topN.forEach(function (k) { var v = (d.s && d.s[k]) || 0; used += v; if (v > 0) items.push([pretty(k), v, srcColor[k]]); });
-        var outras = d.n - used; if (outras > 0) items.push(['outros', outras, ORG_OUTRAS]);
-        var html = '<div class="tt-t">' + dfull(d.d) + ' · ' + fInt(d.n) + ' leads</div>';
+        var outras = (d.org || 0) - used; if (outras > 0) items.push(['outras org.', outras, ORG_OUTRAS]);
+        var html = '<div class="tt-t">' + dfull(d.d) + ' · ' + fInt(dt) + ' leads</div>';
         items.forEach(function (it) { html += '<div class="tt-r"><span style="color:' + it[2] + '">' + esc(it[0]) + '</span><b>' + fInt(it[1]) + '</b></div>'; });
-        html += '<div class="tt-r" style="border-top:1px solid var(--line);margin-top:3px;padding-top:3px"><span>Orgânico / Influencer</span><b>' + fInt(d.o) + ' / ' + fInt(d.i) + '</b></div>';
+        html += '<div class="tt-r" style="border-top:1px solid var(--line);margin-top:3px;padding-top:3px"><span>Tráfego / Orgânico</span><b>' + fInt(d.paid || 0) + ' / ' + fInt(d.org || 0) + '</b></div>';
         showTip(html, e);
       });
       rc.addEventListener('mouseleave', hideTip);
