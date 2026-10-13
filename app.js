@@ -337,6 +337,8 @@
         dview = cap30View(st.lo, st.hi);
       } else if (loteByKey(sub)) {
         dview = loteView(sub, st.lo, st.hi);
+      } else if (sub === 'pages') {
+        dview = pagesView(st.lo, st.hi);
       } else if (hasScore) {
         dview = (showScore ? abcStrip(a) : coverageBanner()) + chartsBlock(key) +
           visaoDiariaSection(v2Rows().filter(function (r) { return r.date >= st.lo && r.date <= st.hi; })) +
@@ -350,7 +352,7 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || loteByKey(sub) || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || sub === 'pages' || loteByKey(sub) || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
@@ -359,6 +361,7 @@
       if (sub === 'acomp' && hasScore) { qualityDaily($('#ch-acq-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); cplADaily($('#ch-accpla-' + key), (ACOMP_G && ACOMP_G.dayArr) || []); }
       wireTrees(key);
       mountDiaExtras();   // desenha o gráfico CPL Meta×Google + liga o toggle de plataforma (otim/v2/cap30)
+      if (sub === 'pages') mountPages();
       return;
     }
     var optSection = '<div class="section-title">Otimização por plataforma <span class="st-line"></span></div>' +
@@ -2077,12 +2080,131 @@
   }
 
   /* =====================================================================
+     📄 VISÃO DAS PÁGINAS — conversão/CPL por landing page (V19/V20/V24...).
+     Tabela rankeada (medalhas, cores, sparkline conv/dia, colunas ordenáveis)
+     + gráfico diário por página c/ seletor de métrica + isolar página.
+     Conversão = leads ÷ visualizações (Meta LPV + Google cliques). Usa o grain
+     do funil live; respeita a barra de período (filtro de data).
+  ===================================================================== */
+  var PG_METRIC = 'conv', PG_SEL = '', PG_SORT = { k: 'conv', dir: -1 }, PG_G = null;
+  var PGLM = [{ k: 'conv', l: '📄 Conversão' }, { k: 'cpl', l: '🎯 CPL' }, { k: 'leads', l: '👥 Leads' }];
+  var PG_PAL = ['#34e5b0', '#57e6ff', '#ffce5c', '#a78bfa', '#ff6183', '#5e9bff', '#f472c0', '#2fd8a6', '#c084fc', '#fb923c'];
+  function pageLabel(cn) {
+    var u = (cn || '').toUpperCase().replace(/[ÁÀÂÃ]/g, 'A');
+    var m = u.match(/PAGINAV(\d+)/); if (m) return 'V' + m[1];
+    m = u.match(/LP(\d+)/); if (m) return 'V' + m[1];          // Google LPxx = mesma landing
+    if (u.indexOf('YOUTUBE_LIVE') >= 0 || u.indexOf('YOUTUBELIVE') >= 0) return 'Base';
+    return null;                                                // não é página (orgânico etc.)
+  }
+  function pgVal(o, metric) { if (metric === 'leads') return o.leads > 0 ? o.leads : null; if (metric === 'cpl') return o.leads ? o.sp / o.leads : null; return o.pv ? o.leads / o.pv : null; }
+  function pgFmt(v, metric) { if (v == null) return '—'; if (metric === 'leads') return fInt(v); if (metric === 'cpl') return money(v); return fPct(v, 1); }
+  function pgAxis(v, metric) { if (metric === 'leads') return fInt(Math.round(v)); if (metric === 'cpl') return fBRL0(v); return fPct(v, 0); }
+  function pglmLabel() { var x = PGLM.filter(function (m) { return m.k === PG_METRIC; })[0]; return x ? x.l.replace(/^\S+\s/, '') : ''; }
+  function convColorP(v, med) { if (v == null || !med) return 'var(--muted)'; var r = v / med; if (r >= 1.1) return 'var(--teal)'; if (r <= 0.9) return 'var(--red)'; return 'var(--gold)'; }
+  function pagesData(lo, hi) {
+    var byP = {}, byPD = {};
+    arr(D.live.grain).forEach(function (g) {
+      if (g.d < lo || g.d > hi) return;
+      var pl = pageLabel(NM.c[g.c]); if (!pl) return;
+      var ld = g.ld || 0, sp = g.sp || 0, lp = g.lp || 0, ck = g.ck || 0;
+      var o = byP[pl] || (byP[pl] = { page: pl, leads: 0, mLp: 0, gCk: 0, sp: 0, mLd: 0, gLd: 0, im: 0 });
+      o.leads += ld; o.sp += sp; o.im += g.im || 0; if (g.p === 'm') { o.mLd += ld; o.mLp += lp; } else if (g.p === 'g') { o.gLd += ld; o.gCk += ck; }
+      var dk = pl + '|' + g.d, d = byPD[dk] || (byPD[dk] = { page: pl, d: g.d, leads: 0, pv: 0, sp: 0 });
+      d.leads += ld; d.sp += sp; d.pv += (g.p === 'm' ? lp : (g.p === 'g' ? ck : 0));
+    });
+    var pages = Object.keys(byP).map(function (k) { var o = byP[k]; o.pv = o.mLp + o.gCk; o.conv = o.pv ? o.leads / o.pv : null; o.cpl = o.leads ? o.sp / o.leads : null; return o; });
+    return { pages: pages, byPD: byPD };
+  }
+  function pgDays(byPD, page) { var out = []; Object.keys(byPD).forEach(function (k) { var d = byPD[k]; if (d.page === page) out.push(d); }); return out.sort(function (a, b) { return a.d.localeCompare(b.d); }); }
+  function pgSpark(days) {
+    var pts = days.map(function (d) { return d.pv ? d.leads / d.pv : null; }), vals = pts.filter(function (x) { return x != null; });
+    if (vals.length < 2) return '<span class="muted" style="font-size:10px">—</span>';
+    var mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals); if (mx <= mn) mx = mn + 0.001;
+    var W = 92, H = 22, n = pts.length, pp = [];
+    pts.forEach(function (v, i) { if (v == null) return; var x = n > 1 ? W / (n - 1) * i : W / 2; var y = H - 2 - (H - 5) * ((v - mn) / (mx - mn)); pp.push(x.toFixed(1) + ',' + y.toFixed(1)); });
+    return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '"><polyline points="' + pp.join(' ') + '" fill="none" stroke="var(--acc)" stroke-width="1.6"/></svg>';
+  }
+  function pagesTable(pages) {
+    var medCpl = median(pages.map(function (p) { return p.cpl; }).filter(function (x) { return x != null; }));
+    var medConv = median(pages.map(function (p) { return p.conv; }).filter(function (x) { return x != null; }));
+    var sk = PG_SORT.k, dir = PG_SORT.dir;
+    var sorted = pages.slice().sort(function (a, b) { var va = a[sk], vb = b[sk]; if (va == null) va = -Infinity; if (vb == null) vb = -Infinity; return (va - vb) * dir; });
+    var rank = pages.slice().filter(function (p) { return p.pv >= 30; }).sort(function (a, b) { return (b.conv || 0) - (a.conv || 0); });
+    var medal = {}; ['🥇', '🥈', '🥉'].forEach(function (m, i) { if (rank[i]) medal[rank[i].page] = m; });
+    function hd(k, lab) { var on = sk === k; return '<th class="sortable' + (on ? ' sorted' : '') + '" data-pgs="' + k + '">' + lab + (on ? (dir < 0 ? ' ▾' : ' ▴') : '') + '</th>'; }
+    var head = '<thead><tr><th class="l">Página</th>' + hd('conv', 'Conversão') + hd('leads', 'Leads') + hd('pv', 'Visualizações') + hd('sp', 'Gasto') + hd('cpl', 'CPL') + '<th>Conv./dia</th></tr></thead>';
+    var body = sorted.map(function (p) {
+      var sel = PG_SEL === p.page;
+      return '<tr class="pg-row' + (sel ? ' sel' : '') + '" data-pg="' + encodeURIComponent(p.page) + '">' +
+        '<td class="l">' + (medal[p.page] || '') + ' <b>' + esc(p.page) + '</b>' + (sel ? ' <span style="color:var(--acc)">●</span>' : '') + '</td>' +
+        '<td><span class="pg-pill" style="color:' + convColorP(p.conv, medConv) + '">' + fPct(p.conv) + '</span></td>' +
+        '<td>' + fInt(p.leads) + '</td><td>' + fInt(p.pv) + '</td><td>' + fBRL0(p.sp) + '</td>' +
+        '<td><span class="pg-pill" style="color:' + cplColor(p.cpl, medCpl) + '">' + money(p.cpl) + '</span></td>' +
+        '<td class="pg-spark">' + pgSpark(pgDays(PG_G.byPD, p.page)) + '</td></tr>';
+    }).join('');
+    return '<div class="card tbl-card"><div class="tbl-scroll"><table class="vtbl pg-tbl">' + head + '<tbody>' + body + '</tbody></table></div></div>';
+  }
+  function pagesLines(host) {
+    if (!host || !PG_G) return;
+    var pages = PG_G.pages, metric = PG_METRIC;
+    var list = PG_SEL ? pages.filter(function (p) { return p.page === PG_SEL; }) : pages.slice().sort(function (a, b) { return b.leads - a.leads; }).slice(0, 8);
+    list.forEach(function (p) { p._days = pgDays(PG_G.byPD, p.page); var mp = {}; p._days.forEach(function (d) { mp[d.d] = d; }); p._map = mp; });
+    var dset = {}; list.forEach(function (p) { p._days.forEach(function (d) { if (pgVal(d, metric) != null) dset[d.d] = 1; }); });
+    var dates = Object.keys(dset).sort();
+    if (!dates.length) { host.innerHTML = '<div class="empty">Sem dados p/ o gráfico no período.</div>'; return; }
+    var maxV = 0; list.forEach(function (p) { p._days.forEach(function (d) { var v = pgVal(d, metric); if (v != null && v > maxV) maxV = v; }); }); if (maxV <= 0) maxV = 1;
+    var W = 860, H = 250, pl = 48, pr = 12, pt = 14, pb = 26, pw = W - pl - pr, ph = H - pt - pb, base = pt + ph, n = dates.length;
+    function xf(i) { return pl + (n > 1 ? pw / (n - 1) * i : pw / 2); } function yf(v) { return base - ph * Math.max(0, Math.min(1, v / maxV)); }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto">';
+    [0, 0.5, 1].forEach(function (fr) { var y = pt + ph * (1 - fr); s += '<line x1="' + pl + '" y1="' + y + '" x2="' + (W - pr) + '" y2="' + y + '" stroke="var(--line)" stroke-dasharray="2 3"></line><text x="' + (pl - 5) + '" y="' + (y + 3) + '" text-anchor="end" fill="var(--muted2)" font-size="9">' + pgAxis(maxV * fr, metric) + '</text>'; });
+    list.forEach(function (p, pi) { var col = PG_PAL[pi % PG_PAL.length], pts = []; dates.forEach(function (dt, i) { var d = p._map[dt]; var v = d ? pgVal(d, metric) : null; if (v != null) pts.push([xf(i), yf(v)]); }); if (pts.length > 1) s += '<path d="M' + pts.map(function (q) { return q[0].toFixed(1) + ' ' + q[1].toFixed(1); }).join(' L') + '" fill="none" stroke="' + col + '" stroke-width="2.2" opacity=".92"></path>'; pts.forEach(function (q) { s += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="2.2" fill="' + col + '"></circle>'; }); });
+    v2Ticks(dates).forEach(function (i) { s += '<text x="' + xf(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" fill="var(--muted2)" font-size="9">' + dfmt(dates[i]) + '</text>'; });
+    var bandW = n > 1 ? pw / (n - 1) : pw; dates.forEach(function (dt, i) { var x = xf(i) - bandW / 2; if (x < pl) x = pl; s += '<rect class="v2hit" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + pt + '" width="' + bandW.toFixed(1) + '" height="' + ph + '" fill="transparent"></rect>'; });
+    s += '</svg>';
+    var leg = list.map(function (p, pi) { var col = PG_PAL[pi % PG_PAL.length]; return '<span class="v2leg' + (PG_SEL === p.page ? ' on' : '') + '" data-pgk="' + encodeURIComponent(p.page) + '"><span class="dot" style="background:' + col + '"></span>' + esc(p.page) + '</span>'; }).join('');
+    host.innerHTML = '<div class="v2chart">' + s + '</div><div class="v2legwrap"><span class="v2metnote">linha = <b>' + pglmLabel() + '/dia</b></span>' + leg + '</div>';
+    Array.prototype.forEach.call(host.querySelectorAll('.v2hit'), function (rc) {
+      rc.addEventListener('mousemove', function (e) { var i = +rc.getAttribute('data-i'), dt = dates[i], items = []; list.forEach(function (p, pi) { var d = p._map[dt]; var v = d ? pgVal(d, metric) : null; if (v != null) items.push([p.page, v, PG_PAL[pi % PG_PAL.length]]); }); items.sort(function (a, b) { return b[1] - a[1]; }); var html = '<div class="tt-t">' + dfull(dt) + ' · ' + pglmLabel() + '</div>'; if (!items.length) html += '<div class="tt-r"><span>sem dado</span></div>'; items.forEach(function (it) { html += '<div class="tt-r"><span style="color:' + it[2] + '">' + esc(it[0]) + '</span><b>' + pgFmt(it[1], metric) + '</b></div>'; }); showTip(html, e); });
+      rc.addEventListener('mouseleave', hideTip);
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.v2leg'), function (sp) { sp.addEventListener('click', function () { var k = decodeURIComponent(sp.getAttribute('data-pgk')); PG_SEL = (PG_SEL === k ? '' : k); renderFunnel(CUR); }); });
+  }
+  function pagesView(lo, hi) {
+    var dat = pagesData(lo, hi), pages = dat.pages;
+    if (!pages.length) return '<div class="empty" style="padding:56px 20px">Sem dados de páginas no período.<br><span style="color:var(--muted2);font-size:12px">As páginas vêm do nome da campanha (PÁGINAVxx / LPxx) · use a barra de período.</span></div>';
+    PG_G = { pages: pages, byPD: dat.byPD, lo: lo, hi: hi };
+    var tot = pages.reduce(function (a, p) { a.leads += p.leads; a.pv += p.pv; a.sp += p.sp; return a; }, { leads: 0, pv: 0, sp: 0 });
+    var avgConv = tot.pv ? tot.leads / tot.pv : null;
+    var best = pages.slice().filter(function (p) { return p.pv >= 50; }).sort(function (a, b) { return (b.conv || 0) - (a.conv || 0); })[0];
+    var kpis = '<div class="kpi-row">' +
+      '<div class="card kpi hero"><div class="klabel">📄 Páginas ativas</div><div class="kval">' + fInt(pages.length) + '</div><div class="ksub"><span>' + fInt(tot.leads) + ' leads</span><span>conv. média <span class="kv">' + fPct(avgConv) + '</span></span></div></div>' +
+      card3('🏆 Melhor conversão', best ? best.page : '—', '<span>' + (best ? fPct(best.conv) : '—') + '</span><span>' + (best ? fInt(best.leads) + ' leads · ' + money(best.cpl) : '') + '</span>') +
+      card3('👥 Leads totais', fInt(tot.leads), '<span>' + fBRL0(tot.sp) + ' investido</span>') +
+      card3('🎯 CPL médio', money(tot.leads ? tot.sp / tot.leads : null), '<span>conv. = leads ÷ visualizações</span>') +
+      '</div>';
+    var banner = '<div class="banner" style="margin:12px 0">📄 <div><b>Conversão de página</b> = leads ÷ visualizações (Meta <b>LPV</b> + Google <b>cliques</b>). Cada página é uma versão da landing (V19, V20, V24…). <b>Clique numa linha</b> da tabela ou na legenda p/ isolar a página no gráfico · clique nos <b>títulos</b> p/ ordenar · use a <b>barra de período</b> p/ filtrar as datas.</div></div>';
+    var metSel = '<span class="pf-h">Métrica do gráfico:</span>' + PGLM.map(function (m) { return '<button class="v2btn' + (PG_METRIC === m.k ? ' on' : '') + '" data-pgm="' + m.k + '">' + m.l + '</button>'; }).join('') + (PG_SEL ? '<button class="v2clr" id="pgClr">✕ ver todas as páginas</button>' : '');
+    var st = 'font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)';
+    return kpis + banner +
+      '<div class="section-title">Tabela de páginas <span style="' + st + '">· medalhas por conversão · clique na linha p/ isolar · nos títulos p/ ordenar</span><span class="st-line"></span></div>' + pagesTable(pages) +
+      '<div class="dia-platbar" style="margin-top:16px">' + metSel + '</div>' +
+      '<div class="chart-card"><div class="chart-head"><h4>📈 ' + pglmLabel() + ' por dia · por página</h4><div class="v2mn">' + (PG_SEL ? 'só <b>' + esc(PG_SEL) + '</b>' : 'top 8 por leads') + ' · legenda clicável · hover</div></div><div id="ch-pages"></div></div>';
+  }
+  function mountPages() {
+    pagesLines(document.getElementById('ch-pages'));
+    Array.prototype.forEach.call(document.querySelectorAll('.pg-tbl th.sortable'), function (h) { h.addEventListener('click', function () { var k = h.getAttribute('data-pgs'); if (PG_SORT.k === k) PG_SORT.dir = -PG_SORT.dir; else PG_SORT = { k: k, dir: -1 }; renderFunnel(CUR); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('.pg-row'), function (r) { r.addEventListener('click', function () { var k = decodeURIComponent(r.getAttribute('data-pg')); PG_SEL = (PG_SEL === k ? '' : k); renderFunnel(CUR); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pgm]'), function (b) { b.addEventListener('click', function () { PG_METRIC = b.getAttribute('data-pgm'); renderFunnel(CUR); }); });
+    var clr = document.getElementById('pgClr'); if (clr) clr.addEventListener('click', function () { PG_SEL = ''; renderFunnel(CUR); });
+  }
+
+  /* =====================================================================
      ROUTER
   ===================================================================== */
   var mounted = {};
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1 };
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1, pages: 1 };
     LOTES.forEach(function (L) { subs[L.key] = 1; });
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
