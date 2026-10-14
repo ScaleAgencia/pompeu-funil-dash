@@ -56,9 +56,11 @@ $CAMP_LIVE      = 'YOUTUBELIVE'
 #   (queries+leads) e atribuido a ESTA campanha unica, entao CPL/ROAS fecham num balde so. Conjunto/anuncio
 #   sao preservados. Campanhas Google NOVAS (futuras, UTM certa) -> adicionar exclusao aqui qdo subirem.
 $CAMP_LIVE_GOOG_UNIFY = 'WBN-DIARIO_2026_E0-ONG_ALL_P4-FRIO_YT_18-09-2026_40_ANOS_YOUTUBE_LIVE_TESTE_HASHES_LP19_GOOGLE_2'
-# EXCECAO (09/10): subiram 2 campanhas Google NOVAS com UTM CERTA (LP19_LEVA_NOVA e LP20_LEVA_NOVA) -> NAO unificar,
-#   deixar separadas (query+leads batem sozinhos). Forma normalizada (CampNorm tira -_ | e deixa maiusculo).
-$CAMP_LIVE_GOOG_KEEP = 'LEVANOVA'
+# EXCECAO: campanhas Google NOVAS com UTM CERTA -> NAO unificar, deixar separadas (query+leads batem sozinhos).
+#   Lista de marcadores separados por ';' (forma normalizada: CampNorm tira -_ | e deixa maiusculo).
+#   09/10: LEVA_NOVA (LP19/LP20_LEVA_NOVA). 14/10: REVISADO (LP25/LP26_GOOGLE_REVISADO).
+#   Campanha Google nova com UTM propria -> adicionar seu marcador aqui.
+$CAMP_LIVE_GOOG_KEEP = 'LEVANOVA;REVISADO'
 $G_PESQ_LIVE    = 'pesquisa_diario_22'
 # --- v9 (30/09): os novos leads passaram a cair na aba v9 (tags WBN-2026-SEMANAL-1-*, mesma campanha YOUTUBE_LIVE).
 #   O funil 'live' passa a ler v8+v9 (nao perder os leads novos). O funil 'cap30' (aba "Captacao 30/09")
@@ -342,6 +344,13 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   #   NORMALIZA separadores (Meta usa "| WBN-2DIAS" hifen, Google usa "_WBN_2DIAS" underscore) ->
   #   tira -_ |espaco e compara em maiuscula, entao 'WBN2DIAS' pega os dois.
   function CampNorm($s) { return (([string]$s) -replace '[-_ |]', '').ToUpperInvariant() }
+  # KeepGoog: campanha Google que NAO deve ser unificada (UTM propria certa). $googUnifyExcept = lista ';'.
+  function KeepGoog($nm) {
+    if ($googUnifyExcept -eq '') { return $false }
+    $n = CampNorm $nm
+    foreach ($mk in ($googUnifyExcept -split ';')) { if ($mk -ne '' -and $n.IndexOf($mk) -ge 0) { return $true } }
+    return $false
+  }
   function CampOk($nm) {
     $n = CampNorm $nm
     if ($campMust -ne '' -and ($n -notlike "*$campMust*")) { return $false }
@@ -411,7 +420,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
       $d = DKey $r[0]; if ($d -eq '') { continue }
       if ($dateFrom -ne '' -and $d -lt $dateFrom) { continue }   # cap30: gasto so a partir de 30/09
       $cnm = QN $r[$gCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }
-      if ($googUnifyCamp -ne '' -and ($googUnifyExcept -eq '' -or (CampNorm $cnm).IndexOf($googUnifyExcept) -lt 0)) { $cnm = $googUnifyCamp }   # unifica o google antigo (UTM quebrada), MAS deixa as novas (LEVA_NOVA) separadas
+      if ($googUnifyCamp -ne '' -and -not (KeepGoog $cnm)) { $cnm = $googUnifyCamp }   # unifica o google antigo (UTM quebrada), MAS deixa as novas (LEVA_NOVA/REVISADO) separadas
       $ci = Intern $CampArr $CampMap $cnm
       $si = Intern $SetArr  $SetMap  (QN $r[$gSetCol] $decodeUtm)
       $ai = Intern $AdArr   $AdMap   (QN $r[$gAdCol]  $decodeUtm)
@@ -472,7 +481,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     if ($p -eq 'o') {
       $ci = $semC; $si = $semS; $ai = $semA
     } else {
-      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($googUnifyCamp -ne '' -and $p -eq 'g' -and ($googUnifyExcept -eq '' -or (CampNorm $cv).IndexOf($googUnifyExcept) -lt 0)) { $cv = $googUnifyCamp }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
+      $cv = $r[6]; if ($cv.IndexOf('{{') -ge 0 -or $cv.Trim() -eq '') { $ci = $semC } else { $cv = if ($decodeUtm) { Canon $cv } else { $cv.Trim() }; if ($googUnifyCamp -ne '' -and $p -eq 'g' -and -not (KeepGoog $cv)) { $cv = $googUnifyCamp }; if ($CampMap.ContainsKey($cv)) { $ci = $CampMap[$cv] } else { $ci = $CampArr.Add($cv); $CampMap[$cv] = $ci } }
       $setCol = if ($p -eq 'g') { $leadSetColG } else { $leadSetColM }   # conjunto por plataforma (2-dias: FB=medium, Google=term)
       $sv = $r[$setCol]; if ($sv.IndexOf('{{') -ge 0 -or $sv.Trim() -eq '') { $si = $semS } else { $sv = if ($decodeUtm) { Canon $sv } else { $sv.Trim() }; if ($SetMap.ContainsKey($sv)) { $si = $SetMap[$sv] } else { $si = $SetArr.Add($sv); $SetMap[$sv] = $si } }
       $av = $r[8]; if ($av.IndexOf('{{') -ge 0 -or $av.Trim() -eq '') { $ai = $semA } else { $av = if ($decodeUtm) { Canon $av } else { $av.Trim() }; if ($AdMap.ContainsKey($av)) { $ai = $AdMap[$av] } else { $ai = $AdArr.Add($av); $AdMap[$av] = $ai } }
