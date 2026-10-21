@@ -2031,7 +2031,8 @@
      ⚠️ dados são por DIA, então a virada de 15h da terça é aproximada p/ o dia todo (a terça inteira
         fica no lote que encerra). Leads e gasto da terça contam no lote que termina. ===== */
   var LOTES = [
-    { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 }
+    { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 },
+    { key: 's4', label: 'Webinar 21–27/10', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (15h)', goal: 20000 }   // volta do Meta (conta nova) · meta R$20k
   ];
   function loteGoalPanel(a, L) {
     if (!L.goal) return '';

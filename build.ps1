@@ -67,6 +67,12 @@ $G_PESQ_LIVE    = 'pesquisa_diario_22'
 #   le SO a v9 e conta gasto+leads a partir de 30/09 ($dateFrom) -> visao da captacao nova.
 $G_LEADS_LIVE2  = 'v9'
 $CAP30_FROM     = '2026-09-30'
+# --- META NOVA (21/10): o webinar voltou a rodar no Meta numa conta nova e as queries passaram a cair
+#   nesta planilha (colunas em ORDEM DIFERENTE: Campaign,Adset,Ad,Spend,Impr,LPV,Clicks,Checkout,Date).
+#   A antiga continua listando os mesmos anuncios c/ GASTO 0 mas com LPV/cliques do pixel -> somar as
+#   duas DOBRARIA LPV/cliques. Regra: nos dias que a NOVA cobre, usa SO a nova; dias anteriores = antiga.
+$QID_META_LIVE2 = '1xJQ3mNxDhu2XyyXrznKnlccRZOi_RA5EpCyTf6BmpXQ'
+$G_META_LIVE2   = 0
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -329,7 +335,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '', $metaId2 = '', $gMeta2 = 0) {
   # $dedupEmail: remove leads com email REPETIDO (mantem so o 1o de cada email no funil) -> conta lead real,
   #   nao infla CPL/conversao de pagina. Vale Google+Meta juntos (dedup e por funil).
   # $googUnifyCamp: se setado, TODA campanha do GOOGLE (query e lead) que passa no campMust/leadCampMust vira
@@ -360,6 +366,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   Write-Host "== Funnel $key : downloading =="
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
+  $fMeta2 = if ($metaId2 -ne '') { Get-Csv $metaId2 $gMeta2 "$key`_meta2" } else { $null }   # Meta conta NOVA (21/10)
   $fGoog = if ($null -ne $gGoog) { Get-Csv $metaId $gGoog "$key`_goog" } else { $null }   # Google na MESMA planilha do Meta do funil
   $fLead = Get-Csv $leadsId $gLeads "$key`_leads"
   $fLead2 = if ($gLeads2 -ne '') { Get-Csv $leadsId $gLeads2 "$key`_leads2" } else { $null }   # 2a aba de leads (live = v8+v9)
@@ -371,37 +378,52 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   # ---- META queries. Detecta AdSet/Ad pelo NOME do cabecalho (ROBUSTO a reordenacao da query).
   #   O cliente ja trocou a ordem 2x (Ad,AdSet <-> AdSet,Ad); ColOf acha a coluna certa case-insensitive.
   #   Default: AdSet=col2, Ad=col3 (ordem normal). $metaAdBeforeSet vira so fallback se nao houver header.
-  $mHdr = @()
-  $mLines0 = [System.IO.File]::ReadAllLines($fMeta, [Text.Encoding]::UTF8)
-  if ($mLines0.Length -gt 0) { $h0 = $mLines0[0]; if ($h0.Length -ge 2 -and $h0[0] -eq '"' -and $h0[$h0.Length - 1] -eq '"') { $mHdr = $h0.Substring(1, $h0.Length - 2) -split '","', -1 } else { $mHdr = $h0 -split ',', -1 } }
-  $mCamCol = ColOf $mHdr @('Campaign Name', 'Campaign', 'Campanha', 'Nome da campanha') 1
-  $mSetCol = ColOf $mHdr @('Ad Set Name', 'AdSet Name', 'Ad Set', 'Conjunto', 'Nome do conjunto de anuncios') -1
-  $mAdCol  = ColOf $mHdr @('Ad Name', 'AdName', 'Anuncio', 'Nome do anuncio') -1
-  if ($mSetCol -lt 0 -or $mAdCol -lt 0) { if ($metaAdBeforeSet) { $mSetCol = 3; $mAdCol = 2 } else { $mSetCol = 2; $mAdCol = 3 } }   # sem header -> usa a flag
-  $mSpCol = ColOf $mHdr @('Amount Spent', 'Amount spent', 'Spend', 'Valor usado', 'Valor gasto') 4
-  $mImCol = ColOf $mHdr @('Impressions', 'Impressoes') 5
-  $mRcCol = ColOf $mHdr @('Reach', 'Alcance') 6
-  $mCkCol = ColOf $mHdr @('Link Clicks', 'Clicks', 'Cliques', 'Cliques no link') 7
-  $mPxCol = ColOf $mHdr @('Leads', 'Results', 'Resultados') 8
-  $mLpCol = ColOf $mHdr @('Landing Page Views', 'LPV', 'Visualizacoes da pagina de destino') 9
-  Write-Host ("   [meta] camp=col$mCamCol conjunto=col$mSetCol anuncio=col$mAdCol gasto=col$mSpCol")
-  $rows = Read-Rows $fMeta
-  foreach ($r in $rows) {
-    if ($r.Count -lt 5) { continue }
-    $d = DKey $r[0]; if ($d -eq '') { continue }
-    if ($dateFrom -ne '' -and $d -lt $dateFrom) { continue }   # cap30: gasto so a partir de 30/09
-    $cnm = QN $r[$mCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }   # separa funis que compartilham a query
-    $ci = Intern $CampArr $CampMap $cnm
-    $si = Intern $SetArr $SetMap (QN $r[$mSetCol] $decodeUtm)
-    $ai = Intern $AdArr  $AdMap  (QN $r[$mAdCol]  $decodeUtm)
-    $n = GNode $grain $d 'm' $ci $si $ai
-    $n.sp += (PNum $r[$mSpCol]) * $TAX
-    if ($mImCol -ge 0 -and $r.Count -gt $mImCol) { $n.im += (PNum $r[$mImCol]) }
-    if ($mRcCol -ge 0 -and $r.Count -gt $mRcCol) { $n.rc += (PNum $r[$mRcCol]) }
-    if ($mCkCol -ge 0 -and $r.Count -gt $mCkCol) { $n.ck += (PNum $r[$mCkCol]) }
-    if ($mPxCol -ge 0 -and $r.Count -gt $mPxCol) { $n.px += (PNum $r[$mPxCol]) }
-    if ($mLpCol -ge 0 -and $r.Count -gt $mLpCol) { $n.lp += (PNum $r[$mLpCol]) }
+  # ParseMeta: le UMA planilha de query Meta e soma no grain. Tudo detectado pelo NOME do cabecalho
+  #   (inclusive a DATA — a planilha nova tem Date na ULTIMA coluna). Com cabecalho reconhecido, coluna
+  #   nao encontrada = ignorada (default -1), p/ nao ler coluna errada por indice (ex: Date virar "leads").
+  #   $skipDates: dias a ignorar (cobertos pela planilha nova) · $collectDates: registra os dias lidos.
+  function ParseMeta($file, $label, $skipDates, $collectDates) {
+    $mHdr = @()
+    $mLines0 = [System.IO.File]::ReadAllLines($file, [Text.Encoding]::UTF8)
+    if ($mLines0.Length -gt 0) { $h0 = $mLines0[0]; if ($h0.Length -ge 2 -and $h0[0] -eq '"' -and $h0[$h0.Length - 1] -eq '"') { $mHdr = $h0.Substring(1, $h0.Length - 2) -split '","', -1 } else { $mHdr = $h0 -split ',', -1 } }
+    $mCamCol = ColOf $mHdr @('Campaign Name', 'Campaign', 'Campanha', 'Nome da campanha') -1
+    $hasHdr = ($mCamCol -ge 0); if (-not $hasHdr) { $mCamCol = 1 }
+    $mDtCol  = ColOf $mHdr @('Day', 'Date', 'Dia', 'Data', 'Reporting Starts', 'Inicio dos relatorios') 0; if ($mDtCol -lt 0) { $mDtCol = 0 }
+    $mSetCol = ColOf $mHdr @('Ad Set Name', 'AdSet Name', 'Adset Name', 'Ad Set', 'Conjunto', 'Nome do conjunto de anuncios') -1
+    $mAdCol  = ColOf $mHdr @('Ad Name', 'AdName', 'Anuncio', 'Nome do anuncio') -1
+    if ($mSetCol -lt 0 -or $mAdCol -lt 0) { if ($metaAdBeforeSet) { $mSetCol = 3; $mAdCol = 2 } else { $mSetCol = 2; $mAdCol = 3 } }   # sem header -> usa a flag
+    $mSpCol = ColOf $mHdr @('Amount Spent', 'Amount spent', 'Spend', 'Spend (Cost, Amount Spent)', 'Cost', 'Valor usado', 'Valor gasto') (Iif $hasHdr -1 4)
+    $mImCol = ColOf $mHdr @('Impressions', 'Impressoes') (Iif $hasHdr -1 5)
+    $mRcCol = ColOf $mHdr @('Reach', 'Alcance') (Iif $hasHdr -1 6)
+    $mCkCol = ColOf $mHdr @('Link Clicks', 'Action Link Clicks', 'Clicks', 'Cliques', 'Cliques no link') (Iif $hasHdr -1 7)
+    $mPxCol = ColOf $mHdr @('Leads', 'Results', 'Resultados') (Iif $hasHdr -1 8)
+    $mLpCol = ColOf $mHdr @('Landing Page Views', 'Action Landing Page View', 'LPV', 'Visualizacoes da pagina de destino') (Iif $hasHdr -1 9)
+    if ($mSpCol -lt 0) { Write-Host "   [meta $label] ATENCAO: coluna de gasto nao encontrada -> pulada"; return }
+    $nRows = 0; $nSkip = 0; $spSum = 0.0
+    foreach ($r in (Read-Rows $file)) {
+      if ($r.Count -lt 5 -or $r.Count -le $mDtCol) { continue }
+      $d = DKey $r[$mDtCol]; if ($d -eq '') { continue }
+      if ($dateFrom -ne '' -and $d -lt $dateFrom) { continue }   # cap30: gasto so a partir de 30/09
+      $cnm = QN $r[$mCamCol] $decodeUtm; if (-not (CampOk $cnm)) { continue }   # separa funis que compartilham a query
+      if ($null -ne $skipDates -and $skipDates.Count -gt 0 -and $skipDates.Contains($d)) { $nSkip++; continue }   # dia coberto pela planilha nova
+      if ($null -ne $collectDates) { [void]$collectDates.Add($d) }
+      $ci = Intern $CampArr $CampMap $cnm
+      $si = Intern $SetArr $SetMap (QN $r[$mSetCol] $decodeUtm)
+      $ai = Intern $AdArr  $AdMap  (QN $r[$mAdCol]  $decodeUtm)
+      $n = GNode $grain $d 'm' $ci $si $ai
+      $v = (PNum $r[$mSpCol]) * $TAX; $n.sp += $v; $spSum += $v
+      if ($mImCol -ge 0 -and $r.Count -gt $mImCol) { $n.im += (PNum $r[$mImCol]) }
+      if ($mRcCol -ge 0 -and $r.Count -gt $mRcCol) { $n.rc += (PNum $r[$mRcCol]) }
+      if ($mCkCol -ge 0 -and $r.Count -gt $mCkCol) { $n.ck += (PNum $r[$mCkCol]) }
+      if ($mPxCol -ge 0 -and $r.Count -gt $mPxCol) { $n.px += (PNum $r[$mPxCol]) }
+      if ($mLpCol -ge 0 -and $r.Count -gt $mLpCol) { $n.lp += (PNum $r[$mLpCol]) }
+      $nRows++
+    }
+    Write-Host ("   [meta $label] data=col$mDtCol camp=col$mCamCol conjunto=col$mSetCol anuncio=col$mAdCol gasto=col$mSpCol lpv=col$mLpCol cliques=col$mCkCol · {0} linhas · R$ {1:n2} c/ imposto{2}" -f $nRows, $spSum, $(if ($nSkip) { " · $nSkip linhas puladas (dia coberto pela nova)" } else { '' }))
   }
+  $metaNewDates = New-Object 'System.Collections.Generic.HashSet[string]'
+  if ($null -ne $fMeta2) { ParseMeta $fMeta2 'nova' $null $metaNewDates }
+  ParseMeta $fMeta 'antiga' $metaNewDates $null
   # ---- GOOGLE queries : Day,Campaign,AdGroup,Ad,Cost,Impr,Clicks,Conversions (pulado se $gGoog nulo). Header-aware.
   if ($null -ne $fGoog) {
     $gHdr = @(); $gLines0 = [System.IO.File]::ReadAllLines($fGoog, [Text.Encoding]::UTF8)
@@ -805,7 +827,7 @@ $diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
-$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2
 # OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
 #   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
 #   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
@@ -821,7 +843,7 @@ $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
 $live = Finalize-Funnel $liveI 0 $false  # LIVE YOUTUBE: SEM dropLeadless — campMust=YOUTUBELIVE ja isola; dropLeadless escondia gasto de campanhas Google (teste) que gastam mas ainda sem lead atribuido
 # CAP30: aba "Captacao 30/09" — SO a v9, gasto+leads a partir de 30/09 ($CAP30_FROM). Captacao pura (CPL), sem pesquisa/leadscore. Nao entra na Attribute-Sales (sem ROAS).
-$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP
+$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2
 $cap30 = Finalize-Funnel $cap30I 0 $false
 
 # ---- dimension metadata (labels + peso) ---------------------------------
