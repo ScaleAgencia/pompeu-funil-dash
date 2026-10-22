@@ -50,7 +50,7 @@ $CAMP_CALC      = 'CALCULADORA'
 #   Queries nas MESMAS abas (Meta gid0, Google gid1609119011), campanha contendo YOUTUBE_LIVE.
 #   Pesquisa DEDICADA 'pesquisa_diario_22' (18 col padrao) -> leadscore A/B/C + CPL A + taxa de resposta.
 $G_LEADS_LIVE   = 'v8'
-$CAMP_LIVE      = 'YOUTUBELIVE'
+$CAMP_LIVE      = 'YOUTUBELIVE;BRIEFING'   # lista ';' (qualquer um). 22/10: campanhas Google ..._PAGINAVxx_BRIEFING (sem YOUTUBE_LIVE no nome, tag SEMANAL)
 # UNIFICACAO GOOGLE (25/09): cliente subiu campanha com nome certo mas UTM errada (gasto numa campanha,
 #   lead taggeado noutra) -> anomalia de lead sem gasto. Pausaram as demais. Fix: TODO o Google youtube_live
 #   (queries+leads) e atribuido a ESTA campanha unica, entao CPL/ROAS fecham num balde so. Conjunto/anuncio
@@ -60,7 +60,7 @@ $CAMP_LIVE_GOOG_UNIFY = 'WBN-DIARIO_2026_E0-ONG_ALL_P4-FRIO_YT_18-09-2026_40_ANO
 #   Lista de marcadores separados por ';' (forma normalizada: CampNorm tira -_ | e deixa maiusculo).
 #   09/10: LEVA_NOVA (LP19/LP20_LEVA_NOVA). 14/10: REVISADO (LP25/LP26_GOOGLE_REVISADO).
 #   Campanha Google nova com UTM propria -> adicionar seu marcador aqui.
-$CAMP_LIVE_GOOG_KEEP = 'LEVANOVA;REVISADO'
+$CAMP_LIVE_GOOG_KEEP = 'LEVANOVA;REVISADO;BRIEFING'
 $G_PESQ_LIVE    = 'pesquisa_diario_22'
 # --- v9 (30/09): os novos leads passaram a cair na aba v9 (tags WBN-2026-SEMANAL-1-*, mesma campanha YOUTUBE_LIVE).
 #   O funil 'live' passa a ler v8+v9 (nao perder os leads novos). O funil 'cap30' (aba "Captacao 30/09")
@@ -359,7 +359,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   }
   function CampOk($nm) {
     $n = CampNorm $nm
-    if ($campMust -ne '' -and ($n -notlike "*$campMust*")) { return $false }
+    if ($campMust -ne '') { $hit = $false; foreach ($x in ($campMust -split ';')) { if ($x -ne '' -and ($n -like "*$x*")) { $hit = $true; break } }; if (-not $hit) { return $false } }  # lista ";" -> basta conter um
     if ($campMustNot -ne '') { foreach ($x in ($campMustNot -split ';')) { if ($x -ne '' -and ($n -like "*$x*")) { return $false } } }  # lista ';' -> exclui qualquer um
     return $true
   }
@@ -476,7 +476,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $tag = $r[3]
     if ($leadCampMust -ne '' -or $leadCampMustNot -ne '') {   # CALCULADORA: separa pela CAMPANHA (a tag e a mesma do diario)
       $lc = CampNorm $r[6]
-      if ($leadCampMust -ne '' -and ($lc -notlike "*$leadCampMust*")) { continue }
+      if ($leadCampMust -ne '') { $hit = $false; foreach ($x in ($leadCampMust -split ';')) { if ($x -ne '' -and ($lc -like "*$x*")) { $hit = $true; break } }; if (-not $hit) { continue } }
       if ($leadCampMustNot -ne '' -and ($lc -like "*$leadCampMustNot*")) { continue }
     } elseif ($tagMode -eq 'contains') {               # 2-DIAS: qualquer edicao (DOMINGO/SEGUNDA/TERCA)-2-DIAS na v6
       if ($tag.IndexOf($tagPfx) -lt 0) { continue }
@@ -1023,7 +1023,7 @@ function Build-OrgLeads {
     else { continue }
     $em = ([string]$r.$cEmail).Trim().ToLowerInvariant()
     $campN = (([string]$r.$cCamp) -replace '[-_ |]', '').ToUpperInvariant()   # normaliza (CampNorm e interno do Build-Funnel)
-    $paid = $campN.Contains('YOUTUBELIVE')   # pago = funil YOUTUBE_LIVE
+    $paid = $false; foreach ($x in ($CAMP_LIVE -split ';')) { if ($x -ne '' -and $campN.Contains($x)) { $paid = $true; break } }   # pago = funil live (YOUTUBE_LIVE ou BRIEFING)
     $src = ([string]$r.$cSrc).Trim().ToLowerInvariant(); if ($src -eq '') { $src = '(sem origem)' }
     $recs.Add([pscustomobject]@{ iso = $iso; em = $em; src = $src; paid = $paid })
   }
