@@ -2033,8 +2033,9 @@
   var LOTES = [
     { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 },
     // plan = verba planejada por dia [Google, Meta] na ordem qua→ter (pedido 23/10: 66% da verba dom–ter)
-    { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (15h)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
-      plan: [[1000, 0], [1500, 200], [1700, 200], [2000, 300], [2800, 1000], [3800, 1200], [3200, 1100]] }
+    // reajuste 23/10: qua/qui = o que foi gasto; sex = gasto até 10h (G 437 / M 136) + resto do dia (G 600 / M 100). Plano original: [[1000,0],[1500,200],[1700,200],[2000,300],[2800,1000],[3800,1200],[3200,1100]]
+    { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (19h30)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
+      plan: [[304, 281], [3428, 266], [1037, 236], [1900, 100], [2700, 950], [3600, 1150], [3031, 1017]], planNote: 'reajustado 23/10' }
   ];
   var WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   function lpPctColor(r) { return r >= 0.95 ? 'var(--teal)' : r >= 0.8 ? 'var(--gold)' : 'var(--red)'; }
@@ -2068,7 +2069,7 @@
         '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, pl ? rv / pl * 100 : 0).toFixed(1) + '%;background:var(--' + (k === 'g' ? 'goog' : 'meta') + ')"></i><span class="lg-mark" style="left:' + Math.min(100, pl ? acc / pl * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
         '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div></div>';
     }
-    return '<div class="lp-wrap"><div class="klabel" style="margin-bottom:10px">📅 Plano de verba por plataforma</div>' +
+    return '<div class="lp-wrap"><div class="klabel" style="margin-bottom:10px">📅 Plano de verba por plataforma' + (L.planNote ? ' <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">· ' + esc(L.planNote) + '</span>' : '') + '</div>' +
       '<div class="lp-plats">' + bar('g', 'Google') + bar('m', 'Meta <span class="muted" style="font-weight:500">(c/ imposto)</span>') + '</div>' +
       '<div class="tbl-scroll"><table class="vtbl dia-tbl lp-tbl"><thead><tr><th class="l" rowspan="2">Dia</th><th colspan="2" class="lp-g">Google</th><th colspan="2" class="lp-m">Meta</th><th colspan="2">Total</th></tr>' +
       '<tr><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
