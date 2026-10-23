@@ -2088,7 +2088,6 @@
     var st = ratio >= 0.98 ? { c: 'var(--teal)', t: 'no ritmo ✓' } : ratio >= 0.85 ? { c: 'var(--gold)', t: 'quase no ritmo' } : { c: 'var(--red)', t: 'atrás do ritmo' };
     var perDay = dleft > 0 ? rem / dleft : 0;              // quanto PRECISA investir/dia p/ bater a meta
     var ritmoAtual = delap > 0 ? spent / delap : spent;   // quanto está investindo/dia até agora
-    var falta = Math.max(0, perDay - ritmoAtual);         // quanto a mais por dia
     var barPct = Math.min(100, pct * 100).toFixed(1);
     return '<div class="card lote-goal">' +
       '<div class="lg-top"><div class="klabel">🎯 Meta de investimento · ' + esc(L.label) + '</div><div class="lg-pct" style="color:' + st.c + '">' + fPct(pct, 0) + '</div></div>' +
@@ -2098,9 +2097,8 @@
       '<div class="lg-stats">' +
       '<div class="lg-stat"><div class="lg-stat-l">📊 Ritmo atual</div><div class="lg-stat-v">' + fBRL0(ritmoAtual) + '<span>/dia</span></div><div class="lg-stat-s">' + fInt(delap) + ' dia' + (delap > 1 ? 's' : '') + ' rodando</div></div>' +
       (dleft > 0
-        ? '<div class="lg-stat"><div class="lg-stat-l">🎯 Precisa investir</div><div class="lg-stat-v" style="color:' + st.c + '">' + fBRL0(perDay) + '<span>/dia</span></div><div class="lg-stat-s">p/ bater nos ' + dleft + ' dia' + (dleft > 1 ? 's' : '') + ' restantes</div></div>' +
-          (falta > 1 ? '<div class="lg-stat"><div class="lg-stat-l">⚡ Precisa subir</div><div class="lg-stat-v" style="color:var(--red)">+' + fBRL0(falta) + '<span>/dia</span></div><div class="lg-stat-s">acima do ritmo atual</div></div>' : '<div class="lg-stat"><div class="lg-stat-l">✓ Ritmo</div><div class="lg-stat-v" style="color:var(--teal)">ok</div><div class="lg-stat-s">no caminho da meta</div></div>')
-        : '<div class="lg-stat"><div class="lg-stat-l">Encerrado</div><div class="lg-stat-v">' + fPct(pct, 0) + '</div><div class="lg-stat-s">da meta atingido</div></div>') +
+        ? '<div class="lg-stat"><div class="lg-stat-l">🎯 Precisa investir</div><div class="lg-stat-v" style="color:' + st.c + '">' + fBRL0(perDay) + '<span>/dia</span></div><div class="lg-stat-s">p/ bater nos ' + dleft + ' dia' + (dleft > 1 ? 's' : '') + ' restantes</div></div>'   // card "⚡ Precisa subir" removido a pedido (23/10)
+        :'<div class="lg-stat"><div class="lg-stat-l">Encerrado</div><div class="lg-stat-v">' + fPct(pct, 0) + '</div><div class="lg-stat-s">da meta atingido</div></div>') +
       '</div>' +
       (fc ? lotePlanSection(L, fc, today) : '') +
       '</div>';
