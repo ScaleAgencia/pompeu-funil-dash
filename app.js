@@ -2050,32 +2050,56 @@
       var o = real[x.d] || (real[x.d] = { g: 0, m: 0 });
       if (x.p === 'g') o.g += x.sp || 0; else if (x.p === 'm') o.m += x.sp || 0;
     });
-    function cell(pl, rv, fut, isT) {
-      if (fut) return '<td>' + fBRL0(pl) + '</td><td class="muted">—</td>';
+    // REPLANEJAMENTO AUTOMÁTICO (pedido 23/10): a cada refresh, o total de cada plataforma (soma do plan) fica fixo
+    //   e o que sobrou é redistribuído nos dias FUTUROS, no mesmo peso do plano original.
+    //   passado = o que gastou · hoje = max(plano, gasto até agora) · gastou a mais hoje -> amanhã em diante cai; a menos -> sobe.
+    var days = L.plan.map(function (p, i) { return addDays(L.from, i); });
+    function replan(k, pi) {
+      var total = 0, done = 0, futW = 0;
+      var adj = L.plan.map(function (p, i) {
+        total += p[pi];
+        var d = days[i], rv = (real[d] || { g: 0, m: 0 })[k];
+        if (d < today) { done += rv; return rv; }
+        if (d === today) { var t = Math.max(p[pi], rv); done += t; return t; }
+        futW += p[pi]; return null;
+      });
+      var left = Math.max(0, total - done);
+      return adj.map(function (v, i) { return v != null ? v : (futW > 0 ? left * L.plan[i][pi] / futW : 0); });
+    }
+    var adjG = replan('g', 0), adjM = replan('m', 1);
+    function cell(pl, rv, fut, isT, orig) {
+      if (fut) {
+        var ch = orig != null && Math.abs(pl - orig) >= 1;
+        return '<td class="lp-adj">' + fBRL0(pl) + (ch ? ' <span class="lp-arr" style="color:' + (pl < orig ? 'var(--gold)' : 'var(--teal)') + '">' + (pl < orig ? '↓' : '↑') + '</span><div class="lp-orig">era ' + fBRL0(orig) + '</div>' : '') + '</td><td class="muted">—</td>';
+      }
       var r = pl ? rv / pl : null;
       var pc = r == null ? '' : ' <span class="lp-pct" style="color:' + (isT ? 'var(--muted)' : lpPctColor(r)) + '">' + fPct(r, 0) + '</span>';
       return '<td>' + fBRL0(pl) + '</td><td class="lp-real">' + fBRL0(rv) + pc + '</td>';
     }
-    var tp = { g: 0, m: 0 }, tr = { g: 0, m: 0 }, ap = { g: 0, m: 0 }, rows = '';
+    var tp = { g: 0, m: 0 }, tr = { g: 0, m: 0 }, ap = { g: 0, m: 0 }, nxt = null, rows = '';
     L.plan.forEach(function (p, i) {
-      var d = addDays(L.from, i), r = real[d] || { g: 0, m: 0 }, fut = d > today, isT = d === today;
+      var d = days[i], r = real[d] || { g: 0, m: 0 }, fut = d > today, isT = d === today;
       tp.g += p[0]; tp.m += p[1]; tr.g += r.g; tr.m += r.m;
       if (!fut) { ap.g += p[0]; ap.m += p[1]; }
+      if (fut && nxt == null) nxt = i;
+      var pg = fut ? adjG[i] : p[0], pm = fut ? adjM[i] : p[1];
       rows += '<tr class="' + (isT ? 'lp-today' : fut ? 'lp-fut' : '') + '"><td class="l">' + WD[new Date(d + 'T00:00:00').getDay()] + ' ' + dfmt(d) + (isT ? ' <span class="lp-tag">hoje</span>' : '') + '</td>' +
-        cell(p[0], r.g, fut, isT) + cell(p[1], r.m, fut, isT) + cell(p[0] + p[1], r.g + r.m, fut, isT) + '</tr>';
+        cell(pg, r.g, fut, isT, p[0]) + cell(pm, r.m, fut, isT, p[1]) + cell(pg + pm, r.g + r.m, fut, isT, p[0] + p[1]) + '</tr>';
     });
     rows += '<tr class="tot"><td class="l">Total</td>' + cell(tp.g, tr.g, false, true) + cell(tp.m, tr.m, false, true) + cell(tp.g + tp.m, tr.g + tr.m, false, true) + '</tr>';
     function bar(k, lab) {
       var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
+      var adj = k === 'g' ? adjG : adjM;
+      var nx = nxt != null ? '<div class="lp-plat-n2">➡️ ' + WD[new Date(days[nxt] + 'T00:00:00').getDay()] + ' ' + dfmt(days[nxt]) + ' (ajustado): <b>' + fBRL0(adj[nxt]) + '</b>' + (Math.abs(adj[nxt] - L.plan[nxt][k === 'g' ? 0 : 1]) >= 1 ? ' <span class="muted">· era ' + fBRL0(L.plan[nxt][k === 'g' ? 0 : 1]) + '</span>' : '') + '</div>' : '';
       return '<div class="lp-plat ' + k + '"><div class="lp-plat-h"><span class="lp-plat-n"><i class="dot ' + k + '"></i>' + lab + '</span><span><b>' + fBRL0(rv) + '</b> <span class="muted">de ' + fBRL0(pl) + '</span></span></div>' +
         '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, pl ? rv / pl * 100 : 0).toFixed(1) + '%;background:var(--' + (k === 'g' ? 'goog' : 'meta') + ')"></i><span class="lg-mark" style="left:' + Math.min(100, pl ? acc / pl * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
-        '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div></div>';
+        '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div>' + nx + '</div>';
     }
     return '<div class="lp-wrap"><div class="klabel" style="margin-bottom:10px">📅 Plano de verba por plataforma' + (L.planNote ? ' <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">· ' + esc(L.planNote) + '</span>' : '') + '</div>' +
       '<div class="lp-plats">' + bar('g', 'Google') + bar('m', 'Meta <span class="muted" style="font-weight:500">(c/ imposto)</span>') + '</div>' +
       '<div class="tbl-scroll"><table class="vtbl dia-tbl lp-tbl"><thead><tr><th class="l" rowspan="2">Dia</th><th colspan="2" class="lp-g">Google</th><th colspan="2" class="lp-m">Meta</th><th colspan="2">Total</th></tr>' +
       '<tr><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="lp-note">Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
+      '<div class="lp-note">🔄 <b>Plano dos próximos dias recalculado a cada atualização</b>: o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído nos dias seguintes, no mesmo peso do plano. Gastou acima hoje → os próximos dias caem (↓); abaixo → sobem (↑). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
   }
   function loteGoalPanel(a, L, fc) {
     if (!L.goal) return '';
