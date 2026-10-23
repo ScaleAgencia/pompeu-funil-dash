@@ -638,6 +638,27 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .lg-stat-s{font-size:11px;color:var(--muted2);margin-top:3px}
 .tab-lote{position:relative}
 @media(max-width:560px){.lg-stats{grid-template-columns:1fr}}
+/* plano de verba por plataforma (lote S3+) */
+.lp-wrap{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.lp-plats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.lp-plat{background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.lp-plat.g{border-top:3px solid var(--goog)} .lp-plat.m{border-top:3px solid var(--meta)}
+.lp-plat-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
+.lp-plat-h b{font-family:var(--display);font-size:17px}
+.lp-plat-n{font-weight:700;display:flex;align-items:center;gap:6px}
+.lp-plat-n .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.lp-plat-s{font-size:11.5px;color:var(--muted2);margin-top:8px}
+.lp-plat-s b{color:var(--txt)}
+.lp-tbl{min-width:600px}
+.lp-tbl th.lp-g{color:var(--goog)} .lp-tbl th.lp-m{color:var(--meta)}
+.lp-tbl thead tr:first-child th{border-bottom:0;padding-bottom:2px}
+.lp-tbl td:nth-child(even){color:var(--muted)}
+.lp-tbl tr.lp-today td{background:rgba(87,230,255,.07)}
+.lp-tbl tr.lp-fut td{opacity:.6}
+.lp-pct{font-size:11px;font-weight:700;margin-left:3px}
+.lp-tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;background:var(--acc);color:#0b0e1a;border-radius:5px;padding:1px 5px;margin-left:4px;font-weight:800}
+.lp-note{font-size:11px;color:var(--muted2);margin-top:8px}
+@media(max-width:560px){.lp-plats{grid-template-columns:1fr}}
 
 /* ===== 💰 capacidade de investimento (tag 297/469/797) na aba Perfil ===== */
 .tier-thermo{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--panel3);margin:6px 0}

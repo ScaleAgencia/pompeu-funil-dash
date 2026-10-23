@@ -2032,16 +2032,58 @@
         fica no lote que encerra). Leads e gasto da terça contam no lote que termina. ===== */
   var LOTES = [
     { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 },
-    { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (15h)', goal: 20000 }   // volta do Meta (conta nova) · meta R$20k
+    // plan = verba planejada por dia [Google, Meta] na ordem qua→ter (pedido 23/10: 66% da verba dom–ter)
+    { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (15h)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
+      plan: [[1000, 0], [1500, 200], [1700, 200], [2000, 300], [2800, 1000], [3800, 1200], [3200, 1100]] }
   ];
-  function loteGoalPanel(a, L) {
+  var WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  function lpPctColor(r) { return r >= 0.95 ? 'var(--teal)' : r >= 0.8 ? 'var(--gold)' : 'var(--red)'; }
+  // plano diário por plataforma × realizado (Meta c/ imposto, igual o resto da dash)
+  function lotePlanSection(L, fc, today) {
+    if (!L.plan) return '';
+    var real = {};
+    arr(fc.grain).forEach(function (x) {
+      if (x.d < L.from || x.d > L.to) return;
+      var o = real[x.d] || (real[x.d] = { g: 0, m: 0 });
+      if (x.p === 'g') o.g += x.sp || 0; else if (x.p === 'm') o.m += x.sp || 0;
+    });
+    function cell(pl, rv, fut, isT) {
+      if (fut) return '<td>' + fBRL0(pl) + '</td><td class="muted">—</td>';
+      var r = pl ? rv / pl : null;
+      var pc = r == null ? '' : ' <span class="lp-pct" style="color:' + (isT ? 'var(--muted)' : lpPctColor(r)) + '">' + fPct(r, 0) + '</span>';
+      return '<td>' + fBRL0(pl) + '</td><td class="lp-real">' + fBRL0(rv) + pc + '</td>';
+    }
+    var tp = { g: 0, m: 0 }, tr = { g: 0, m: 0 }, ap = { g: 0, m: 0 }, rows = '';
+    L.plan.forEach(function (p, i) {
+      var d = addDays(L.from, i), r = real[d] || { g: 0, m: 0 }, fut = d > today, isT = d === today;
+      tp.g += p[0]; tp.m += p[1]; tr.g += r.g; tr.m += r.m;
+      if (!fut) { ap.g += p[0]; ap.m += p[1]; }
+      rows += '<tr class="' + (isT ? 'lp-today' : fut ? 'lp-fut' : '') + '"><td class="l">' + WD[new Date(d + 'T00:00:00').getDay()] + ' ' + dfmt(d) + (isT ? ' <span class="lp-tag">hoje</span>' : '') + '</td>' +
+        cell(p[0], r.g, fut, isT) + cell(p[1], r.m, fut, isT) + cell(p[0] + p[1], r.g + r.m, fut, isT) + '</tr>';
+    });
+    rows += '<tr class="tot"><td class="l">Total</td>' + cell(tp.g, tr.g, false, true) + cell(tp.m, tr.m, false, true) + cell(tp.g + tp.m, tr.g + tr.m, false, true) + '</tr>';
+    function bar(k, lab) {
+      var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
+      return '<div class="lp-plat ' + k + '"><div class="lp-plat-h"><span class="lp-plat-n"><i class="dot ' + k + '"></i>' + lab + '</span><span><b>' + fBRL0(rv) + '</b> <span class="muted">de ' + fBRL0(pl) + '</span></span></div>' +
+        '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, pl ? rv / pl * 100 : 0).toFixed(1) + '%;background:var(--' + (k === 'g' ? 'goog' : 'meta') + ')"></i><span class="lg-mark" style="left:' + Math.min(100, pl ? acc / pl * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
+        '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div></div>';
+    }
+    return '<div class="lp-wrap"><div class="klabel" style="margin-bottom:10px">📅 Plano de verba por plataforma</div>' +
+      '<div class="lp-plats">' + bar('g', 'Google') + bar('m', 'Meta <span class="muted" style="font-weight:500">(c/ imposto)</span>') + '</div>' +
+      '<div class="tbl-scroll"><table class="vtbl dia-tbl lp-tbl"><thead><tr><th class="l" rowspan="2">Dia</th><th colspan="2" class="lp-g">Google</th><th colspan="2" class="lp-m">Meta</th><th colspan="2">Total</th></tr>' +
+      '<tr><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="lp-note">Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
+  }
+  function loteGoalPanel(a, L, fc) {
     if (!L.goal) return '';
     var spent = a.spend || 0, goal = L.goal, pct = goal ? spent / goal : 0, rem = Math.max(0, goal - spent);
     var dtot = Math.round((new Date(L.to + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
     var today = (D.live && D.live.leadMax) || L.to; if (today > L.to) today = L.to; if (today < L.from) today = L.from;
     var delap = Math.round((new Date(today + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
     var dleft = Math.max(0, dtot - delap);
-    var expected = goal * delap / dtot, ratio = expected ? spent / expected : 1;
+    var expected = goal * delap / dtot;
+    if (L.plan) { expected = 0; for (var pi = 0; pi < delap && pi < L.plan.length; pi++) expected += L.plan[pi][0] + L.plan[pi][1]; }   // ritmo esperado = plano acumulado
+    var ratio = expected ? spent / expected : 1;
     var st = ratio >= 0.98 ? { c: 'var(--teal)', t: 'no ritmo ✓' } : ratio >= 0.85 ? { c: 'var(--gold)', t: 'quase no ritmo' } : { c: 'var(--red)', t: 'atrás do ritmo' };
     var perDay = dleft > 0 ? rem / dleft : 0;              // quanto PRECISA investir/dia p/ bater a meta
     var ritmoAtual = delap > 0 ? spent / delap : spent;   // quanto está investindo/dia até agora
@@ -2050,7 +2092,7 @@
     return '<div class="card lote-goal">' +
       '<div class="lg-top"><div class="klabel">🎯 Meta de investimento · ' + esc(L.label) + '</div><div class="lg-pct" style="color:' + st.c + '">' + fPct(pct, 0) + '</div></div>' +
       '<div class="lg-val"><b>' + fBRL0(spent) + '</b> <span class="muted">de ' + fBRL0(goal) + '</span></div>' +
-      '<div class="goalbar lg-bar"><i style="width:' + barPct + '%;background:' + st.c + '"></i><span class="lg-mark" style="left:' + Math.min(100, delap / dtot * 100).toFixed(1) + '%" title="ritmo esperado hoje"></span></div>' +
+      '<div class="goalbar lg-bar"><i style="width:' + barPct + '%;background:' + st.c + '"></i><span class="lg-mark" style="left:' + Math.min(100, expected / goal * 100).toFixed(1) + '%" title="ritmo esperado hoje"></span></div>' +
       '<div class="lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span> <span class="muted">·</span> <span>faltam <b class="kv">' + fBRL0(rem) + '</b>' + (dleft > 0 ? ' em <b class="kv">' + dleft + ' dia' + (dleft > 1 ? 's' : '') + '</b> (até ' + dfmt(L.to) + ')' : ' · lote encerrado') + '</span></div>' +
       '<div class="lg-stats">' +
       '<div class="lg-stat"><div class="lg-stat-l">📊 Ritmo atual</div><div class="lg-stat-v">' + fBRL0(ritmoAtual) + '<span>/dia</span></div><div class="lg-stat-s">' + fInt(delap) + ' dia' + (delap > 1 ? 's' : '') + ' rodando</div></div>' +
@@ -2059,6 +2101,7 @@
           (falta > 1 ? '<div class="lg-stat"><div class="lg-stat-l">⚡ Precisa subir</div><div class="lg-stat-v" style="color:var(--red)">+' + fBRL0(falta) + '<span>/dia</span></div><div class="lg-stat-s">acima do ritmo atual</div></div>' : '<div class="lg-stat"><div class="lg-stat-l">✓ Ritmo</div><div class="lg-stat-v" style="color:var(--teal)">ok</div><div class="lg-stat-s">no caminho da meta</div></div>')
         : '<div class="lg-stat"><div class="lg-stat-l">Encerrado</div><div class="lg-stat-v">' + fPct(pct, 0) + '</div><div class="lg-stat-s">da meta atingido</div></div>') +
       '</div>' +
+      (fc ? lotePlanSection(L, fc, today) : '') +
       '</div>';
   }
   function loteByKey(k) { for (var i = 0; i < LOTES.length; i++) if (LOTES[i].key === k) return LOTES[i]; return null; }
@@ -2067,7 +2110,7 @@
   function loteView(key, lo, hi) {
     var L = loteByKey(key); if (!L) return '';
     var fc = loteFn(key);
-    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L) : '';   // meta SEMPRE sobre o lote cheio
+    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L, fc) : '';   // meta SEMPRE sobre o lote cheio
     // filtro de data da barra de período, limitado à janela do lote
     var leadMax = (D.live && D.live.leadMax) || L.to;
     var natTo = L.to < leadMax ? L.to : leadMax;   // fim NATURAL do lote (não passa de hoje)
