@@ -669,3 +669,13 @@ a.v2crumb:hover{color:var(--acc);border-bottom-color:var(--acc-dim)}
 .tier-thermo{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--panel3);margin:6px 0}
 .tier-thermo span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#08131f;font-family:var(--display);min-width:2px}
 .lp-tbl tr.lp-fut td.lp-adj{opacity:1}
+/* aba única Semanas: sub-abas por lote (S2, S3, S4...) */
+.lote-nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.lote-nav-l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);font-weight:700;margin-right:2px}
+.lote-btn{font-family:inherit;cursor:pointer;border:1px solid var(--line2);background:var(--panel2);color:var(--muted);border-radius:10px;padding:7px 14px;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:flex-start;gap:1px;transition:.15s}
+.lote-btn span{font-size:10.5px;font-weight:500;color:var(--muted2)}
+.lote-btn:hover{color:var(--txt);border-color:var(--acc)}
+.lote-btn.on{background:linear-gradient(160deg,rgba(87,230,255,.22),rgba(167,139,250,.16));border-color:var(--acc);color:var(--txt)}
+.lote-btn.on span{color:var(--muted)}
+.lote-nogoal{font-size:13px;padding:14px 16px}
+.tab-perp{position:relative}

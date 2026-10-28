@@ -51,6 +51,8 @@ $CAMP_CALC      = 'CALCULADORA'
 #   Pesquisa DEDICADA 'pesquisa_diario_22' (18 col padrao) -> leadscore A/B/C + CPL A + taxa de resposta.
 $G_LEADS_LIVE   = 'v8'
 $CAMP_LIVE      = 'YOUTUBELIVE;BRIEFING'   # lista ';' (qualquer um). 22/10: campanhas Google ..._PAGINAVxx_BRIEFING (sem YOUTUBE_LIVE no nome, tag SEMANAL)
+$CAMP_PERP         = 'FUNILPERPETUO'   # 28/10: funil NOVO 'WBN-PERPETUO' (campanhas c/ tag final funil-perpetuo, Meta+Google) -> fora do live
+$PERP_FROM         = '2026-10-27'      # 1a campanha perpetuo (Meta 27/10)
 $CAMP_LIVE_ANY      = 'WBNDIARIO'    # 22/10: QUALQUER campanha WBN-DIARIO entra no funil live...
 $CAMP_LIVE_ANY_FROM = '2026-10-01'   # ...mas so a partir desta data (antes disso WBN-DIARIO = funis velhos 2DIAS/CALC/URL-Investimentos)
 # UNIFICACAO GOOGLE (25/09): cliente subiu campanha com nome certo mas UTM errada (gasto numa campanha,
@@ -826,12 +828,12 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: query = campanhas que COMECAM com "WBN-DIARIO" (campMust) E NAO sao 2-dias (campMustNot).
 #   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
 #   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC;$CAMP_LIVE" 7 7 '' '' $CAMP_CALC
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC;$CAMP_LIVE;$CAMP_PERP" 7 7 '' '' $CAMP_CALC
 # 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
-$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
 # OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
 #   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
 #   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
@@ -847,8 +849,12 @@ $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
 $live = Finalize-Funnel $liveI 0 $false  # LIVE YOUTUBE: SEM dropLeadless — campMust=YOUTUBELIVE ja isola; dropLeadless escondia gasto de campanhas Google (teste) que gastam mas ainda sem lead atribuido
 # CAP30: aba "Captacao 30/09" — SO a v9, gasto+leads a partir de 30/09 ($CAP30_FROM). Captacao pura (CPL), sem pesquisa/leadscore. Nao entra na Attribute-Sales (sem ROAS).
-$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE '' 5 7 '' $CAMP_LIVE -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
+$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
 $cap30 = Finalize-Funnel $cap30I 0 $false
+# WBN-PERPETUO (28/10): funil NOVO, campanhas c/ 'funil-perpetuo' (Meta conta nova + Google). Captacao pura (CPL), sem pesquisa/ROAS.
+#   Leads: por enquanto procura utm_campaign c/ funil-perpetuo na v9 (cliente ainda vai mandar a lista propria -> trocar aqui).
+$perpI = Build-Funnel 'perp' 'WBN-PERPETUO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_PERP '' 5 7 '' $CAMP_PERP -dedupEmail $true -dateFrom $PERP_FROM -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2
+$perp = Finalize-Funnel $perpI 0 $false
 
 # ---- dimension metadata (labels + peso) ---------------------------------
 $DIMS = @(
@@ -1027,6 +1033,7 @@ function Build-OrgLeads {
     else { continue }
     $em = ([string]$r.$cEmail).Trim().ToLowerInvariant()
     $campN = (([string]$r.$cCamp) -replace '[-_ |]', '').ToUpperInvariant()   # normaliza (CampNorm e interno do Build-Funnel)
+    if ($campN.Contains($CAMP_PERP)) { continue }   # lead do funil WBN-PERPETUO nao e da live
     $paid = $false; foreach ($x in ($CAMP_LIVE -split ';')) { if ($x -ne '' -and $campN.Contains($x)) { $paid = $true; break } }; if (-not $paid -and $iso -ge $CAMP_LIVE_ANY_FROM -and $campN.Contains($CAMP_LIVE_ANY)) { $paid = $true }   # pago = funil live (YOUTUBE_LIVE ou BRIEFING)
     $src = ([string]$r.$cSrc).Trim().ToLowerInvariant(); if ($src -eq '') { $src = '(sem origem)' }
     $recs.Add([pscustomobject]@{ iso = $iso; em = $em; src = $src; paid = $paid })
@@ -1071,6 +1078,7 @@ $payload = @{
   diario        = FunnelPayload $dia
   live          = FunnelPayload $live
   cap30         = FunnelPayload $cap30
+  perp          = FunnelPayload $perp
   orgLeads      = $orgLeads
   pesquisa      = @{
     surveyStart = $SURVEY_START

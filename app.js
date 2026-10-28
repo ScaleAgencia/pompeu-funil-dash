@@ -335,8 +335,11 @@
         dview = orgLeadsView(st.lo, st.hi);
       } else if (sub === 'cap30') {
         dview = cap30View(st.lo, st.hi);
-      } else if (loteByKey(sub)) {
-        dview = loteView(sub, st.lo, st.hi);
+      } else if (sub === 'lotes') {
+        if (!loteByKey(LOTE_SEL)) LOTE_SEL = loteDefault();
+        dview = loteNav() + loteView(LOTE_SEL, st.lo, st.hi);
+      } else if (sub === 'perp') {
+        dview = perpView(st.lo, st.hi);
       } else if (sub === 'pages') {
         dview = pagesView(st.lo, st.hi);
       } else if (hasScore) {
@@ -352,8 +355,9 @@
       }
       body.innerHTML =
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
-        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || sub === 'pages' || loteByKey(sub) || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
+        (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || sub === 'pages' || sub === 'lotes' || sub === 'perp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
+      if (sub === 'lotes') Array.prototype.forEach.call(body.querySelectorAll('.lote-btn'), function (b) { b.addEventListener('click', function () { LOTE_SEL = b.getAttribute('data-lote'); renderFunnel(CUR); }); });
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
@@ -2024,6 +2028,14 @@
       '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM · campanha › conjunto › anúncio</span><span class="st-line"></span></div>' +
       '<div class="opt-cols">' + optColDaily(fc, 'g', lo, hi, 'cpl') + optColDaily(fc, 'm', lo, hi, 'cpl') + '</div>';
   }
+  // ♾️ WBN-PERPETUO (28/10): funil novo, campanhas c/ tag final "funil-perpetuo" (Meta + Google), separado do live
+  function perpView(lo, hi) {
+    var P0 = D.perp, nLd = 0;
+    arr(P0 && P0.grain).forEach(function (g) { nLd += g.ld || 0; });
+    var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>WBN-PERPETUO</b> — funil novo: campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do Live YouTube (gasto e leads delas <b>não</b> entram nas outras abas). Meta com imposto ×1,1385; Google sem.' +
+      (nLd ? '' : ' <span style="color:var(--gold)">⏳ Leads ainda não conectados — por enquanto só o gasto aparece (CPL/conversão entram assim que a lista de leads for ligada).</span>') + '</div></div>';
+    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.');
+  }
   function cap30View(lo, hi) {
     var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
     return captacaoView(D.cap30, lo, hi, banner, 'Sem dados de captação a partir de 30/09 ainda. · atualiza a cada 3h.');
@@ -2037,8 +2049,21 @@
     // plan = verba planejada por dia [Google, Meta] na ordem qua→ter (pedido 23/10: 66% da verba dom–ter)
     // reajuste 23/10: qua/qui = o que foi gasto; sex = gasto até 10h (G 437 / M 136) + resto do dia (G 600 / M 100). Plano original: [[1000,0],[1500,200],[1700,200],[2000,300],[2800,1000],[3800,1200],[3200,1100]]
     { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (19h30)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
-      plan: [[304, 281], [3428, 266], [1037, 236], [1900, 100], [2700, 950], [3600, 1150], [3031, 1017]], planNote: 'reajustado 23/10' }
+      plan: [[304, 281], [3428, 266], [1037, 236], [1900, 100], [2700, 950], [3600, 1150], [3031, 1017]], planNote: 'reajustado 23/10' },
+    { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11' }   // meta + plano diário: cliente vai mandar (28/10)
   ];
+  // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
+  function loteDefault() {
+    var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
+    LOTES.forEach(function (L) { if (L.from <= t) k = L.key; });
+    return k;
+  }
+  var LOTE_SEL = null;
+  function loteNav() {
+    return '<div class="lote-nav"><span class="lote-nav-l">Semana:</span>' + LOTES.map(function (L) {
+      return '<button class="lote-btn' + (L.key === LOTE_SEL ? ' on' : '') + '" data-lote="' + L.key + '">' + esc(L.label) + '<span>' + dfmt(L.from) + '–' + dfmt(L.to) + (L.goal ? ' · meta ' + fBRL0(L.goal) : '') + '</span></button>';
+    }).join('') + '</div>';
+  }
   var WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   function lpPctColor(r) { return r >= 0.95 ? 'var(--teal)' : r >= 0.8 ? 'var(--gold)' : 'var(--red)'; }
   // plano diário por plataforma × realizado (Meta c/ imposto, igual o resto da dash)
@@ -2135,7 +2160,7 @@
   function loteView(key, lo, hi) {
     var L = loteByKey(key); if (!L) return '';
     var fc = loteFn(key);
-    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L, fc) : '';   // meta SEMPRE sobre o lote cheio
+    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L, fc) : '<div class="card lote-goal lote-nogoal">🎯 <b>Meta de investimento da ' + esc(L.label) + ' ainda não definida</b> <span class="muted">— assim que chegar, entra aqui o painel de meta + plano diário por plataforma (igual S3).</span></div>';   // meta SEMPRE sobre o lote cheio
     // filtro de data da barra de período, limitado à janela do lote
     var leadMax = (D.live && D.live.leadMax) || L.to;
     var natTo = L.to < leadMax ? L.to : leadMax;   // fim NATURAL do lote (não passa de hoje)
@@ -2273,8 +2298,8 @@
   var mounted = {};
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
-    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1, pages: 1 };
-    LOTES.forEach(function (L) { subs[L.key] = 1; });
+    var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1, pages: 1, lotes: 1, perp: 1 };
+    if (loteByKey(tab)) { LOTE_SEL = tab; tab = 'lotes'; }   // link antigo #s2/#s3 -> aba Semanas c/ o lote certo
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
@@ -2296,17 +2321,6 @@
     if (!mounted[fk]) { mounted[fk] = true; mountFunnel(fk); } else renderFunnel(fk);
     window.scrollTo(0, 0);
   }
-  // injeta as abas de lote dinamicamente (S2, S3, ... = 1 linha no array LOTES, sem mexer no HTML)
-  (function () {
-    var nav = document.getElementById('mainTabs'); if (!nav) return;
-    var anchor = nav.querySelector('.tab[data-tab="cap30"]');
-    LOTES.forEach(function (L) {
-      if (nav.querySelector('.tab[data-tab="' + L.key + '"]')) return;
-      var b = document.createElement('button'); b.className = 'tab tab-lote'; b.setAttribute('data-tab', L.key); b.textContent = '🗓️ ' + L.label;
-      if (anchor && anchor.nextSibling) nav.insertBefore(b, anchor.nextSibling); else nav.appendChild(b);
-      anchor = b;
-    });
-  })();
   Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-tab')); }); });
   Array.prototype.forEach.call(document.querySelectorAll('#funnelBar .fn-btn'), function (b) { b.addEventListener('click', function () { switchFunnel(b.getAttribute('data-f')); }); });
   window.addEventListener('hashchange', function () { show(location.hash.slice(1) || 'otim'); });
