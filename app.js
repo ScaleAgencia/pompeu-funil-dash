@@ -2035,7 +2035,9 @@
     arr(P0 && P0.grain).forEach(function (g) { nLd += g.ld || 0; });
     var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>WBN-PERPETUO</b> — funil novo: campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do Live YouTube (gasto e leads delas <b>não</b> entram nas outras abas). Leads = 3 listas, uma por faixa de investimento (<b>$297</b> aba v11 · <b>$469</b> aba v10 · <b>$797</b> planilha de leads da página), só utm_campaign funil-perpetuo, sem duplicar email. Meta com imposto ×1,1385; Google sem.' +
       (nLd ? '' : ' <span style="color:var(--gold)">⏳ Nenhum lead do perpétuo ainda.</span>') + '</div></div>';
-    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.') + (P0 ? invTierSection(P0, lo, hi) : '');
+    // meta da semana SEMPRE sobre a janela cheia do PERP_GOAL (não depende da barra de período), igual os lotes
+    var goalHtml = (P0 && PERP_GOAL.goal) ? loteGoalPanel(agg(P0, PERP_GOAL.from, PERP_GOAL.to), PERP_GOAL, P0) : '';
+    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.', goalHtml) + (P0 ? invTierSection(P0, lo, hi) : '');
   }
   function cap30View(lo, hi) {
     var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
@@ -2051,8 +2053,14 @@
     // reajuste 23/10: qua/qui = o que foi gasto; sex = gasto até 10h (G 437 / M 136) + resto do dia (G 600 / M 100). Plano original: [[1000,0],[1500,200],[1700,200],[2000,300],[2800,1000],[3800,1200],[3200,1100]]
     { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (19h30)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
       plan: [[304, 281], [3428, 266], [1037, 236], [1900, 100], [2700, 950], [3600, 1150], [3031, 1017]], planNote: 'reajustado 23/10' },
-    { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11' }   // meta + plano diário: cliente vai mandar (28/10)
+    // S4: meta R$35k (Google 29k + Meta 6k), plano diário enviado 28/10 (seg 02/11 = feriado)
+    { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 35000,
+      plan: [[1000, 100], [2800, 500], [4400, 600], [3800, 700], [6600, 1000], [6100, 1300], [4300, 1800]] }
   ];
+  // ♾️ WBN-PERPETUO · meta da semana qua 28/10 → ter 03/11 = R$5k, MESMA distribuição do plano S3 original
+  //   (Google [1000,1500,1700,2000,2800,3800,3200] / Meta [0,200,200,300,1000,1200,1100] de 20k) × 0,25 -> Google 4k + Meta 1k
+  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 5000,
+    plan: [[250, 0], [375, 50], [425, 50], [500, 75], [700, 250], [950, 300], [800, 275]], planNote: 'mesma distribuição do plano S3, escalada p/ R$ 5 mil' };
   // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
   function loteDefault() {
     var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
@@ -2095,7 +2103,7 @@
     var adjG = replan('g', 0), adjM = replan('m', 1);
     function cell(pl, rv, fut, isT, orig) {
       if (fut) {
-        var ch = orig != null && Math.abs(pl - orig) >= 1;
+        var ch = orig != null && Math.abs(pl - orig) >= 5;   // < R$5 = ruído, não marca
         return '<td class="lp-adj">' + fBRL0(pl) + (ch ? ' <span class="lp-arr" style="color:' + (pl < orig ? 'var(--gold)' : 'var(--teal)') + '">' + (pl < orig ? '↓' : '↑') + '</span><div class="lp-orig">era ' + fBRL0(orig) + '</div>' : '') + '</td><td class="muted">—</td>';
       }
       var r = pl ? rv / pl : null;
@@ -2116,7 +2124,7 @@
     function bar(k, lab) {
       var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
       var adj = k === 'g' ? adjG : adjM;
-      var nx = nxt != null ? '<div class="lp-plat-n2">➡️ ' + WD[new Date(days[nxt] + 'T00:00:00').getDay()] + ' ' + dfmt(days[nxt]) + ' (ajustado): <b>' + fBRL0(adj[nxt]) + '</b>' + (Math.abs(adj[nxt] - L.plan[nxt][k === 'g' ? 0 : 1]) >= 1 ? ' <span class="muted">· era ' + fBRL0(L.plan[nxt][k === 'g' ? 0 : 1]) + '</span>' : '') + '</div>' : '';
+      var nx = nxt != null ? '<div class="lp-plat-n2">➡️ ' + WD[new Date(days[nxt] + 'T00:00:00').getDay()] + ' ' + dfmt(days[nxt]) + ' (ajustado): <b>' + fBRL0(adj[nxt]) + '</b>' + (Math.abs(adj[nxt] - L.plan[nxt][k === 'g' ? 0 : 1]) >= 5 ? ' <span class="muted">· era ' + fBRL0(L.plan[nxt][k === 'g' ? 0 : 1]) + '</span>' : '') + '</div>' : '';
       return '<div class="lp-plat ' + k + '"><div class="lp-plat-h"><span class="lp-plat-n"><i class="dot ' + k + '"></i>' + lab + '</span><span><b>' + fBRL0(rv) + '</b> <span class="muted">de ' + fBRL0(pl) + '</span></span></div>' +
         '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, pl ? rv / pl * 100 : 0).toFixed(1) + '%;background:var(--' + (k === 'g' ? 'goog' : 'meta') + ')"></i><span class="lg-mark" style="left:' + Math.min(100, pl ? acc / pl * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
         '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div>' + nx + '</div>';
