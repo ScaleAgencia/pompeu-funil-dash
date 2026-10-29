@@ -357,6 +357,7 @@
         (edBadge ? '<div class="ed-badge-wrap">' + edBadge + '</div>' : '') +
         (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || sub === 'pages' || sub === 'lotes' || sub === 'perp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
+      if (sub === 'perp') tierDaily($('#ch-tier-perp'), TIER_G || []);
       if (sub === 'lotes') Array.prototype.forEach.call(body.querySelectorAll('.lote-btn'), function (b) { b.addEventListener('click', function () { LOTE_SEL = b.getAttribute('data-lote'); renderFunnel(CUR); }); });
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
@@ -2032,9 +2033,9 @@
   function perpView(lo, hi) {
     var P0 = D.perp, nLd = 0;
     arr(P0 && P0.grain).forEach(function (g) { nLd += g.ld || 0; });
-    var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>WBN-PERPETUO</b> — funil novo: campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do Live YouTube (gasto e leads delas <b>não</b> entram nas outras abas). Meta com imposto ×1,1385; Google sem.' +
-      (nLd ? '' : ' <span style="color:var(--gold)">⏳ Leads ainda não conectados — por enquanto só o gasto aparece (CPL/conversão entram assim que a lista de leads for ligada).</span>') + '</div></div>';
-    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.');
+    var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>WBN-PERPETUO</b> — funil novo: campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do Live YouTube (gasto e leads delas <b>não</b> entram nas outras abas). Leads = 3 listas, uma por faixa de investimento (<b>$297</b> aba v11 · <b>$469</b> aba v10 · <b>$797</b> planilha de leads da página), só utm_campaign funil-perpetuo, sem duplicar email. Meta com imposto ×1,1385; Google sem.' +
+      (nLd ? '' : ' <span style="color:var(--gold)">⏳ Nenhum lead do perpétuo ainda.</span>') + '</div></div>';
+    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.') + (P0 ? invTierSection(P0, lo, hi) : '');
   }
   function cap30View(lo, hi) {
     var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';

@@ -339,7 +339,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '', $metaId2 = '', $gMeta2 = 0, $campAny = '', $campAnyFrom = '') {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '', $metaId2 = '', $gMeta2 = 0, $campAny = '', $campAnyFrom = '', $extraLeadRows = $null) {
   # $dedupEmail: remove leads com email REPETIDO (mantem so o 1o de cada email no funil) -> conta lead real,
   #   nao infla CPL/conversao de pagina. Vale Google+Meta juntos (dedup e por funil).
   # $googUnifyCamp: se setado, TODA campanha do GOOGLE (query e lead) que passa no campMust/leadCampMust vira
@@ -463,6 +463,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   # ---- LEADS : Nome,Email,WhatsApp,Tag,src,medium,campaign,term,content,Timestamp
   # INLINED hot loop (no per-lead function calls) -> processes ~130k rows fast.
   $rows = if ($null -ne $fLead2) { @(Read-Rows $fLead) + @(Read-Rows $fLead2) } else { Read-Rows $fLead }   # live = v8 + v9 (dedup por email trata sobreposicao)
+  if ($null -ne $extraLeadRows) { $rows = @($rows) + @($extraLeadRows) }   # perp: leads de OUTRA planilha (1nTJY, formato diferente) ja convertidos p/ o layout v
   $emIndex = @{}   # emailKey -> ArrayList of leadObj (this funnel)
   $seenEm = New-Object 'System.Collections.Generic.HashSet[string]'   # dedup por email ($dedupEmail): guarda o 1o de cada email
   $dupEm = 0
@@ -520,7 +521,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
     $n.ld += 1
     $totalLeads++
     # tier de capacidade de investimento: tag termina em -297 (ate 100/mes), -469 (100-1k), -797 (1k-2k+)
-    $tier = if ($tag -match '-(297|469|797)$') { $matches[1] } else { 'sem' }
+    $tier = if ($tag -match '-(297|469|797)(-\d+)?$') { $matches[1] } else { 'sem' }   # -469-2 = 2a pagina da faixa 469 (perpetuo)
     $ivd = $invTierDay[$d]; if ($null -eq $ivd) { $ivd = @{ t297 = 0; t469 = 0; t797 = 0; tNone = 0 }; $invTierDay[$d] = $ivd }
     switch ($tier) { '297' { $ivd.t297++ } '469' { $ivd.t469++ } '797' { $ivd.t797++ } default { $ivd.tNone++ } }
     $edLeads[$tag] = $edLeads[$tag] + 1
@@ -851,9 +852,41 @@ $live = Finalize-Funnel $liveI 0 $false  # LIVE YOUTUBE: SEM dropLeadless — ca
 # CAP30: aba "Captacao 30/09" — SO a v9, gasto+leads a partir de 30/09 ($CAP30_FROM). Captacao pura (CPL), sem pesquisa/leadscore. Nao entra na Attribute-Sales (sem ROAS).
 $cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
 $cap30 = Finalize-Funnel $cap30I 0 $false
+# WBN-PERPETUO · LEADS (29/10): caem em 3 lugares, 1 por faixa de investimento (pagina 297/469/797):
+#   LID aba v11 (tag ...-297) + LID aba v10 (...-469 / -469-2) -> mesmo layout das v8/v9 (Nome,Email,WhatsApp,Tag,src,med,camp,term,content,Timestamp)
+#   + planilha 1nTJY aba 'leads' (...-797) -> layout DIFERENTE (name,email,whatsapp,...,tag,utm_*,createdAt ISO UTC,date) e tem
+#     ~16k leads de outros funis -> filtra utm_campaign c/ funil-perpetuo e converte p/ o layout v (Timestamp em BRT).
+$G_LEADS_PERP  = 'v10'
+$G_LEADS_PERP2 = 'v11'
+$QID_LEADS_PERP3 = '1nTJYpjYLlK8ZOfA-V9faNSuqz-oegrhccmOgGvrEzm0'
+$G_LEADS_PERP3   = 'leads'
+function Get-PerpExtraLeads {
+  $f = Get-Csv $QID_LEADS_PERP3 $G_LEADS_PERP3 'perp_leads3'
+  $lines = [System.IO.File]::ReadAllLines($f, [Text.Encoding]::UTF8)
+  if ($lines.Length -lt 2) { return @() }
+  $h0 = $lines[0]; $hdr = if ($h0.Length -ge 2 -and $h0[0] -eq '"') { $h0.Substring(1, $h0.Length - 2) -split '","', -1 } else { $h0 -split ',', -1 }
+  $ix = @{}; for ($i = 0; $i -lt $hdr.Length; $i++) { $ix[$hdr[$i].Trim().ToLowerInvariant()] = $i }
+  $need = @('name', 'email', 'whatsapp', 'tag', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content')
+  foreach ($n in $need) { if (-not $ix.ContainsKey($n)) { Write-Host "   [perp leads3] ATENCAO: coluna '$n' nao encontrada -> planilha 1nTJY ignorada"; return @() } }
+  $iCr = if ($ix.ContainsKey('createdat')) { $ix['createdat'] } else { -1 }
+  $iDt = if ($ix.ContainsKey('date')) { $ix['date'] } else { -1 }
+  $out = New-Object System.Collections.ArrayList
+  foreach ($r in (Read-Rows $f)) {
+    if ($r.Count -le $ix['utm_campaign']) { continue }
+    $cn = (([string]$r[$ix['utm_campaign']]) -replace '[-_ |+]', '').ToUpperInvariant()
+    if (-not $cn.Contains($CAMP_PERP)) { continue }
+    $ts = ''
+    if ($iCr -ge 0 -and $r.Count -gt $iCr) { $dto = [DateTimeOffset]::MinValue; if ([DateTimeOffset]::TryParse($r[$iCr], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$dto)) { $ts = $dto.ToOffset([TimeSpan]::FromHours(-3)).ToString('dd/MM/yyyy HH:mm:ss') } }
+    if ($ts -eq '' -and $iDt -ge 0 -and $r.Count -gt $iDt -and $r[$iDt].Length -ge 10) { $ts = $r[$iDt].Substring(0, 10) + ' 00:00:00' }
+    if ($ts -eq '') { continue }
+    [void]$out.Add([string[]]@($r[$ix['name']], $r[$ix['email']], $r[$ix['whatsapp']], $r[$ix['tag']], $r[$ix['utm_source']], $r[$ix['utm_medium']], $r[$ix['utm_campaign']], $r[$ix['utm_term']], $r[$ix['utm_content']], $ts))
+  }
+  Write-Host "   [perp leads3] planilha 1nTJY: $($out.Count) leads funil-perpetuo convertidos"
+  return ,$out.ToArray()
+}
 # WBN-PERPETUO (28/10): funil NOVO, campanhas c/ 'funil-perpetuo' (Meta conta nova + Google). Captacao pura (CPL), sem pesquisa/ROAS.
 #   Leads: por enquanto procura utm_campaign c/ funil-perpetuo na v9 (cliente ainda vai mandar a lista propria -> trocar aqui).
-$perpI = Build-Funnel 'perp' 'WBN-PERPETUO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_PERP '' 5 7 '' $CAMP_PERP -dedupEmail $true -dateFrom $PERP_FROM -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2
+$perpI = Build-Funnel 'perp' 'WBN-PERPETUO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_PERP $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_PERP '' 5 7 '' $CAMP_PERP -dedupEmail $true -dateFrom $PERP_FROM -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -gLeads2 $G_LEADS_PERP2 -extraLeadRows (Get-PerpExtraLeads)
 $perp = Finalize-Funnel $perpI 0 $false
 
 # ---- dimension metadata (labels + peso) ---------------------------------
