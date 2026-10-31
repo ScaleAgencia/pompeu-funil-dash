@@ -2056,17 +2056,19 @@
     // S4: meta R$35k (Google 29k + Meta 6k), plano diário enviado 28/10 (seg 02/11 = feriado). Plano original:
     //   [[1000,100],[2800,500],[4400,600],[3800,700],[6600,1000],[6100,1300],[4300,1800]]
     // REAJUSTE 31/10: meta cai p/ R$15k e TUDO o que falta vai pro Meta (fill 'm'). qua–sex = gasto real (G 1.740 / M 645);
-    //   sáb→ter: Google 0, Meta = 15.000 − 2.385 = 12.615 no peso do Meta original (700/1000/1300/1800).
+    //   sáb→ter: Google 0, Meta = 15.000 − 2.385 = 12.615 no peso do TOTAL/dia do plano original (sáb 4.500 · dom 7.600 · seg 7.400 · ter 6.100)
+    //   -> respeita a regra "mais verba dom/seg, terça menor (encerra 19h30)", NÃO progressivo (o peso só-Meta era 700→1800, crescente).
     { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 15000, fill: 'm',
-      plan: [[415, 146], [586, 254], [739, 245], [0, 1840], [0, 2628], [0, 3417], [0, 4730]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta' }
+      plan: [[415, 146], [586, 254], [739, 245], [0, 2217], [0, 3745], [0, 3647], [0, 3006]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta (pico dom/seg)' }
   ];
   // ♾️ WBN-PERPETUO · meta da semana qua 28/10 → ter 03/11 = R$5k, MESMA distribuição do plano S3 original
   //   (Google [1000,1500,1700,2000,2800,3800,3200] / Meta [0,200,200,300,1000,1200,1100] de 20k) × 0,25 -> Google 4k + Meta 1k
   //   Plano original: [[250,0],[375,50],[425,50],[500,75],[700,250],[950,300],[800,275]]
   // REAJUSTE 31/10: segue R$5k, mas o restante vai TODO pro Meta (fill 'm'). qua–sex = gasto real (G 537 / M 385);
-  //   sáb→ter: Google 0, Meta = 5.000 − 922 = 4.078 no peso do Meta original (75/250/300/275).
+  //   sáb→ter: Google 0, Meta = 5.000 − 922 = 4.078 no peso do TOTAL/dia do plano original (sáb 575 · dom 950 · seg 1.250 · ter 1.075)
+  //   -> mesma regra do S3: pico na segunda, dom e ter altos, sábado menor.
   var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 5000, fill: 'm',
-    plan: [[537, 106], [0, 117], [0, 162], [0, 340], [0, 1133], [0, 1359], [0, 1246]], planNote: 'reajustado 31/10 · restante todo no Meta' };
+    plan: [[537, 106], [0, 117], [0, 162], [0, 609], [0, 1006], [0, 1324], [0, 1139]], planNote: 'reajustado 31/10 · restante todo no Meta (pico seg)' };
   // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
   function loteDefault() {
     var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
