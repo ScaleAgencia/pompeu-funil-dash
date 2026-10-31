@@ -2053,14 +2053,20 @@
     // reajuste 23/10: qua/qui = o que foi gasto; sex = gasto até 10h (G 437 / M 136) + resto do dia (G 600 / M 100). Plano original: [[1000,0],[1500,200],[1700,200],[2000,300],[2800,1000],[3800,1200],[3200,1100]]
     { key: 's3', label: 'Webinar S3', from: '2026-10-21', to: '2026-10-27', de: 'qua 21/10', ate: 'ter 27/10 (19h30)', goal: 20000,   // volta do Meta (conta nova) · meta R$20k
       plan: [[304, 281], [3428, 266], [1037, 236], [1900, 100], [2700, 950], [3600, 1150], [3031, 1017]], planNote: 'reajustado 23/10' },
-    // S4: meta R$35k (Google 29k + Meta 6k), plano diário enviado 28/10 (seg 02/11 = feriado)
-    { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 35000,
-      plan: [[1000, 100], [2800, 500], [4400, 600], [3800, 700], [6600, 1000], [6100, 1300], [4300, 1800]] }
+    // S4: meta R$35k (Google 29k + Meta 6k), plano diário enviado 28/10 (seg 02/11 = feriado). Plano original:
+    //   [[1000,100],[2800,500],[4400,600],[3800,700],[6600,1000],[6100,1300],[4300,1800]]
+    // REAJUSTE 31/10: meta cai p/ R$15k e TUDO o que falta vai pro Meta (fill 'm'). qua–sex = gasto real (G 1.740 / M 645);
+    //   sáb→ter: Google 0, Meta = 15.000 − 2.385 = 12.615 no peso do Meta original (700/1000/1300/1800).
+    { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 15000, fill: 'm',
+      plan: [[415, 146], [586, 254], [739, 245], [0, 1840], [0, 2628], [0, 3417], [0, 4730]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta' }
   ];
   // ♾️ WBN-PERPETUO · meta da semana qua 28/10 → ter 03/11 = R$5k, MESMA distribuição do plano S3 original
   //   (Google [1000,1500,1700,2000,2800,3800,3200] / Meta [0,200,200,300,1000,1200,1100] de 20k) × 0,25 -> Google 4k + Meta 1k
-  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 5000,
-    plan: [[250, 0], [375, 50], [425, 50], [500, 75], [700, 250], [950, 300], [800, 275]], planNote: 'mesma distribuição do plano S3, escalada p/ R$ 5 mil' };
+  //   Plano original: [[250,0],[375,50],[425,50],[500,75],[700,250],[950,300],[800,275]]
+  // REAJUSTE 31/10: segue R$5k, mas o restante vai TODO pro Meta (fill 'm'). qua–sex = gasto real (G 537 / M 385);
+  //   sáb→ter: Google 0, Meta = 5.000 − 922 = 4.078 no peso do Meta original (75/250/300/275).
+  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 5000, fill: 'm',
+    plan: [[537, 106], [0, 117], [0, 162], [0, 340], [0, 1133], [0, 1359], [0, 1246]], planNote: 'reajustado 31/10 · restante todo no Meta' };
   // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
   function loteDefault() {
     var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
@@ -2088,7 +2094,9 @@
     //   e o que sobrou é redistribuído nos dias FUTUROS, no mesmo peso do plano original.
     //   passado = o que gastou · hoje = max(plano, gasto até agora) · gastou a mais hoje -> amanhã em diante cai; a menos -> sobe.
     var days = L.plan.map(function (p, i) { return addDays(L.from, i); });
-    function replan(k, pi) {
+    // L.fill = 'm' (pedido 31/10): a meta é do TOTAL e o que falta vai todo p/ o Meta -> total do Meta = meta − Google (real/plan);
+    //   se o Google ainda gastar algo, o Meta dos próximos dias cai na mesma medida.
+    function replan(k, pi, totOverride) {
       var total = 0, done = 0, futW = 0;
       var adj = L.plan.map(function (p, i) {
         total += p[pi];
@@ -2097,10 +2105,13 @@
         if (d === today) { var t = Math.max(p[pi], rv); done += t; return t; }
         futW += p[pi]; return null;
       });
+      if (totOverride != null) total = totOverride;
       var left = Math.max(0, total - done);
       return adj.map(function (v, i) { return v != null ? v : (futW > 0 ? left * L.plan[i][pi] / futW : 0); });
     }
-    var adjG = replan('g', 0), adjM = replan('m', 1);
+    var adjG = replan('g', 0);
+    var totMFill = L.fill === 'm' ? L.goal - adjG.reduce(function (s, v) { return s + v; }, 0) : null;
+    var adjM = replan('m', 1, totMFill);
     function cell(pl, rv, fut, isT, orig) {
       if (fut) {
         var ch = orig != null && Math.abs(pl - orig) >= 5;   // < R$5 = ruído, não marca
@@ -2120,6 +2131,7 @@
       rows += '<tr class="' + (isT ? 'lp-today' : fut ? 'lp-fut' : '') + '"><td class="l">' + WD[new Date(d + 'T00:00:00').getDay()] + ' ' + dfmt(d) + (isT ? ' <span class="lp-tag">hoje</span>' : '') + '</td>' +
         cell(pg, r.g, fut, isT, p[0]) + cell(pm, r.m, fut, isT, p[1]) + cell(pg + pm, r.g + r.m, fut, isT, p[0] + p[1]) + '</tr>';
     });
+    if (totMFill != null) { tp.g = L.goal - totMFill; tp.m = totMFill; }   // fill: Google = o que já foi (real/plan), Meta = o que falta p/ a meta total
     rows += '<tr class="tot"><td class="l">Total</td>' + cell(tp.g, tr.g, false, true) + cell(tp.m, tr.m, false, true) + cell(tp.g + tp.m, tr.g + tr.m, false, true) + '</tr>';
     function bar(k, lab) {
       var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
@@ -2133,7 +2145,11 @@
       '<div class="lp-plats">' + bar('g', 'Google') + bar('m', 'Meta <span class="muted" style="font-weight:500">(c/ imposto)</span>') + '</div>' +
       '<div class="tbl-scroll"><table class="vtbl dia-tbl lp-tbl"><thead><tr><th class="l" rowspan="2">Dia</th><th colspan="2" class="lp-g">Google</th><th colspan="2" class="lp-m">Meta</th><th colspan="2">Total</th></tr>' +
       '<tr><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th><th>Plano</th><th>Real</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="lp-note">🔄 <b>Plano dos próximos dias recalculado a cada atualização</b>: o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído nos dias seguintes, no mesmo peso do plano. Gastou acima hoje → os próximos dias caem (↓); abaixo → sobem (↑). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
+      '<div class="lp-note">🔄 <b>Plano dos próximos dias recalculado a cada atualização</b>: ' +
+        (totMFill != null
+          ? 'a meta total (' + fBRL0(L.goal) + ') fica fixa e <b>tudo o que falta vai pro Meta</b> (Google sem verba nos próximos dias). Se o Google ainda gastar algo, o Meta dos próximos dias cai na mesma medida. '
+          : 'o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído nos dias seguintes, no mesmo peso do plano. ') +
+        'Gastou acima hoje → os próximos dias caem (↓); abaixo → sobem (↑). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
   }
   function loteGoalPanel(a, L, fc) {
     if (!L.goal) return '';
