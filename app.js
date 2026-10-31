@@ -2061,14 +2061,16 @@
     { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 15000, fill: 'm',
       plan: [[415, 146], [586, 254], [739, 245], [0, 2217], [0, 3745], [0, 3647], [0, 3006]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta (pico dom/seg)' }
   ];
-  // ♾️ WBN-PERPETUO · meta da semana qua 28/10 → ter 03/11 = R$5k, MESMA distribuição do plano S3 original
+  // ♾️ WBN-PERPETUO · meta da semana = R$5k (1ª versão 28/10 usava qua→ter; corrigido 31/10 p/ ter→seg, ver abaixo), MESMA distribuição do plano S3 original
   //   (Google [1000,1500,1700,2000,2800,3800,3200] / Meta [0,200,200,300,1000,1200,1100] de 20k) × 0,25 -> Google 4k + Meta 1k
   //   Plano original: [[250,0],[375,50],[425,50],[500,75],[700,250],[950,300],[800,275]]
-  // REAJUSTE 31/10: segue R$5k, mas o restante vai TODO pro Meta (fill 'm'). qua–sex = gasto real (G 537 / M 385);
-  //   sáb→ter: Google 0, Meta = 5.000 − 922 = 4.078 no peso do TOTAL/dia do plano original (sáb 575 · dom 950 · seg 1.250 · ter 1.075)
-  //   -> mesma regra do S3: pico na segunda, dom e ter altos, sábado menor.
-  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 5000, fill: 'm',
-    plan: [[537, 106], [0, 117], [0, 162], [0, 609], [0, 1006], [0, 1324], [0, 1139]], planNote: 'reajustado 31/10 · restante todo no Meta (pico seg)' };
+  // REAJUSTE 31/10: segue R$5k, mas o restante vai TODO pro Meta (fill 'm').
+  // DATA DO PERPÉTUO (31/10): o webinar dele é na SEGUNDA (tag dos leads WBN-2026-SEMANAL-SEGUNDA) e a campanha começou ter 27/10
+  //   -> semana do perpétuo = TER → SEG (até 19h30), 1 dia antes da S4. Mesmo formato do plano S3 deslocado 1 dia
+  //   (dia 1 = quase nada ... pico no penúltimo dia, último dia encerra 19h30).
+  //   ter–sex = gasto real (G 537 / M 483); sáb→seg: Google 0, Meta = 5.000 − 1.020 = 3.979 no peso do TOTAL/dia (950 · 1.250 · 1.075).
+  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-27', to: '2026-11-02', de: 'ter 27/10', ate: 'seg 02/11 (19h30)', goal: 5000, fill: 'm',
+    plan: [[0, 99], [537, 106], [0, 117], [0, 162], [0, 1154], [0, 1519], [0, 1306]], planNote: 'semana ter→seg (webinar de segunda) · reajustado 31/10 · restante todo no Meta' };
   // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
   function loteDefault() {
     var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
