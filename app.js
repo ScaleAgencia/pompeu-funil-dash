@@ -336,8 +336,8 @@
       } else if (sub === 'cap30') {
         dview = cap30View(st.lo, st.hi);
       } else if (sub === 'lotes') {
-        if (!loteByKey(LOTE_SEL)) LOTE_SEL = loteDefault();
-        dview = loteNav() + loteView(LOTE_SEL, st.lo, st.hi);
+        if (!loteByKey(LOTE_SEL)) LOTE_SEL = weekDefault(LOTES);
+        dview = weekNav(LOTES, LOTE_SEL) + loteView(LOTE_SEL, st.lo, st.hi);
       } else if (sub === 'perp') {
         dview = perpView(st.lo, st.hi);
       } else if (sub === 'pages') {
@@ -358,7 +358,7 @@
         (sub === 'consol' || sub === 'acomp' || sub === 'resp' || sub === 'v2' || sub === 'leads' || sub === 'cap30' || sub === 'pages' || sub === 'lotes' || sub === 'perp' || (sub === 'perfil' && hasScore) ? '' : kpiRow(key, a, false)) + dview;
       if (sub === 'v2') mountV2();
       if (sub === 'perp') tierDaily($('#ch-tier-perp'), TIER_G || []);
-      if (sub === 'lotes') Array.prototype.forEach.call(body.querySelectorAll('.lote-btn'), function (b) { b.addEventListener('click', function () { LOTE_SEL = b.getAttribute('data-lote'); renderFunnel(CUR); }); });
+      if (sub === 'lotes' || sub === 'perp') Array.prototype.forEach.call(body.querySelectorAll('.lote-btn'), function (b) { b.addEventListener('click', function () { if (sub === 'perp') PERP_SEL = b.getAttribute('data-lote'); else LOTE_SEL = b.getAttribute('data-lote'); renderFunnel(CUR); }); });
       if (sub === 'leads') orgDaily($('#ch-org'), ORG_G.days, ORG_G.topN, ORG_G.srcColor);
       if (sub === 'otim') drawCharts(key, a);
       if (sub === 'resp') respRateDaily($('#ch-resp-' + key), (RESP_G && RESP_G.dayArr) || []);
@@ -2029,25 +2029,36 @@
       '<div class="section-title">Otimização da captação <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)">· CPL, conv. de página, CTR, CPM · campanha › conjunto › anúncio</span><span class="st-line"></span></div>' +
       '<div class="opt-cols">' + optColDaily(fc, 'g', lo, hi, 'cpl') + optColDaily(fc, 'm', lo, hi, 'cpl') + '</div>';
   }
-  // ♾️ WBN-PERPETUO (28/10): funil novo, campanhas c/ tag final "funil-perpetuo" (Meta + Google), separado do live
+  // ♾️ FUNIL SEGUNDA (WBN-PERPETUO, 28/10): campanhas c/ tag final "funil-perpetuo" (Meta + Google), separado do funil Terça.
+  //   Webinar na segunda -> capta de TER a SEG; sub-abas por semana (Perpétuo S1, S2...), igual o funil Terça.
   function perpView(lo, hi) {
-    var P0 = D.perp, nLd = 0;
-    arr(P0 && P0.grain).forEach(function (g) { nLd += g.ld || 0; });
-    var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>WBN-PERPETUO</b> — funil novo: campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do Live YouTube (gasto e leads delas <b>não</b> entram nas outras abas). Leads = 3 listas, uma por faixa de investimento (<b>$297</b> aba v11 · <b>$469</b> aba v10 · <b>$797</b> planilha de leads da página), só utm_campaign funil-perpetuo, sem duplicar email. Meta com imposto ×1,1385; Google sem.' +
-      (nLd ? '' : ' <span style="color:var(--gold)">⏳ Nenhum lead do perpétuo ainda.</span>') + '</div></div>';
-    // meta da semana SEMPRE sobre a janela cheia do PERP_GOAL (não depende da barra de período), igual os lotes
-    var goalHtml = (P0 && PERP_GOAL.goal) ? loteGoalPanel(agg(P0, PERP_GOAL.from, PERP_GOAL.to), PERP_GOAL, P0) : '';
-    return captacaoView(P0, lo, hi, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.', goalHtml) + (P0 ? invTierSection(P0, lo, hi) : '');
+    var P0 = D.perp; if (!P0) return '<div class="empty" style="padding:56px 20px">Sem dados do funil Segunda ainda.</div>';
+    var L = perpByKey(PERP_SEL); if (!L) { PERP_SEL = weekDefault(PERP_WEEKS); L = perpByKey(PERP_SEL); }
+    var fc = { key: L.key, grain: P0.grain, daily: P0.daily };   // key própria p/ sort/expand independente por semana
+    var w = weekRange(L, lo, hi);
+    var banner = '<div class="banner" style="margin-bottom:14px">♾️ <div><b>Funil Segunda · ' + esc(L.label) + '</b> — webinar na segunda, captação de <b>' + L.de + '</b> → <b>' + L.ate + '</b>' + w.filt + '. Campanhas com a tag final <b>funil-perpetuo</b> (Meta + Google), separadas do funil Terça. Leads = 3 listas, uma por faixa de investimento (<b>$297</b> aba v11 · <b>$469</b> aba v10 · <b>$797</b> planilha de leads da página), só utm_campaign funil-perpetuo, sem duplicar email. Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">A semana vira toda terça. Use a barra de período acima pra filtrar dias dentro da semana.</span></div></div>';
+    return weekNav(PERP_WEEKS, PERP_SEL) + captacaoView(fc, w.from, w.to, banner, 'Sem gasto das campanhas funil-perpetuo ainda. · atualiza a cada 3h.', weekGoalHtml(L, fc)) + invTierSection(P0, w.from, w.to);
   }
   function cap30View(lo, hi) {
     var banner = '<div class="banner" style="margin-bottom:14px">🚀 <div><b>Captação 30/09</b> — gasto e leads <b>a partir de 30/09</b>: queries do YOUTUBE_LIVE (Meta + Google) cruzadas com os leads novos da <b>aba v9</b> (deduplicados por email). Meta com imposto ×1,1385; Google sem.</div></div>';
     return captacaoView(D.cap30, lo, hi, banner, 'Sem dados de captação a partir de 30/09 ainda. · atualiza a cada 3h.');
   }
-  /* ===== LOTES semanais (qua → ter 15h) — pedido Erick: cada semana = uma aba (S2, S3, ...).
-     Janela de data do funil live (que já tem v8+v9). Adicionar lote novo = 1 linha no array.
-     ⚠️ dados são por DIA, então a virada de 15h da terça é aproximada p/ o dia todo (a terça inteira
-        fica no lote que encerra). Leads e gasto da terça contam no lote que termina. ===== */
-  var LOTES = [
+  /* ===== SEMANAS — 🗓️ Funil Terça (qua → ter) e ♾️ Funil Segunda (ter → seg). Sub-abas S2, S3, ...
+     Semana nova aparece SOZINHA quando a data vira (extendWeeks), sem meta até o cliente passar.
+     Meta/plano de uma semana = preencher goal + plan na lista abaixo.
+     ⚠️ dados são por DIA: o último dia inteiro fica na semana que encerra. ===== */
+  var WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  function weekLab(d) { return WD[new Date(d + 'T00:00:00').getDay()].toLowerCase() + ' ' + dfmt(d); }
+  function weekToday() { return (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10); }
+  function extendWeeks(list, prefix, label) {
+    var t = weekToday(), last = list[list.length - 1], n = +last.key.slice(prefix.length), from = addDays(last.from, 7);
+    while (from <= t) {
+      n++; last = { key: prefix + n, label: label + ' S' + n, from: from, to: addDays(from, 6), de: weekLab(from), ate: weekLab(addDays(from, 6)) + ' (19h30)' };
+      list.push(last); from = addDays(from, 7);
+    }
+    return list;
+  }
+  var LOTES = extendWeeks([
     { key: 's2', label: 'Webinar S2', from: '2026-10-07', to: '2026-10-13', de: 'qua 07/10', ate: 'ter 13/10 (15h)', goal: 15000 },
     // plan = verba planejada por dia [Google, Meta] na ordem qua→ter (pedido 23/10: 66% da verba dom–ter)
     // reajuste 23/10: qua/qui = o que foi gasto; sex = gasto até 10h (G 437 / M 136) + resto do dia (G 600 / M 100). Plano original: [[1000,0],[1500,200],[1700,200],[2000,300],[2800,1000],[3800,1200],[3200,1100]]
@@ -2059,9 +2070,13 @@
     //   sáb→ter: Google 0, Meta = 15.000 − 2.385 = 12.615 no peso do TOTAL/dia do plano original (sáb 4.500 · dom 7.600 · seg 7.400 · ter 6.100)
     //   -> respeita a regra "mais verba dom/seg, terça menor (encerra 19h30)", NÃO progressivo (o peso só-Meta era 700→1800, crescente).
     { key: 's4', label: 'Webinar S4', from: '2026-10-28', to: '2026-11-03', de: 'qua 28/10', ate: 'ter 03/11 (19h30)', goal: 15000, fill: 'm',
-      plan: [[415, 146], [586, 254], [739, 245], [0, 2217], [0, 3745], [0, 3647], [0, 3006]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta (pico dom/seg)' }
-  ];
-  // ♾️ WBN-PERPETUO · meta da semana = R$5k (1ª versão 28/10 usava qua→ter; corrigido 31/10 p/ ter→seg, ver abaixo), MESMA distribuição do plano S3 original
+      plan: [[415, 146], [586, 254], [739, 245], [0, 2217], [0, 3745], [0, 3647], [0, 3006]], planNote: 'reajustado 31/10 · meta R$ 15 mil, restante todo no Meta (pico dom/seg)' },
+    // S5: mantém R$15k (pedido 05/11). Plano = tabela da S4 × 15/35 (Google 12.430 + Meta 2.570), mesma forma por dia (pico dom/seg).
+    //   Divisão Google/Meta do plano da S4 porque o Google voltou a rodar (~R$2,5k/dia); se for tudo no Meta: fill 'm' + Google 0.
+    { key: 's5', label: 'Webinar S5', from: '2026-11-04', to: '2026-11-10', de: 'qua 04/11', ate: 'ter 10/11 (19h30)', goal: 15000,
+      plan: [[429, 43], [1200, 214], [1886, 257], [1629, 300], [2829, 429], [2614, 557], [1843, 770]], planNote: 'meta R$ 15 mil · divisão Google/Meta do plano da S4' }
+  ], 's', 'Webinar');
+  // ♾️ PERPÉTUO S1 · meta = R$5k (1ª versão 28/10 usava qua→ter; corrigido 31/10 p/ ter→seg, ver abaixo), MESMA distribuição do plano S3 original
   //   (Google [1000,1500,1700,2000,2800,3800,3200] / Meta [0,200,200,300,1000,1200,1100] de 20k) × 0,25 -> Google 4k + Meta 1k
   //   Plano original: [[250,0],[375,50],[425,50],[500,75],[700,250],[950,300],[800,275]]
   // REAJUSTE 31/10: segue R$5k, mas o restante vai TODO pro Meta (fill 'm').
@@ -2069,21 +2084,25 @@
   //   -> semana do perpétuo = TER → SEG (até 19h30), 1 dia antes da S4. Mesmo formato do plano S3 deslocado 1 dia
   //   (dia 1 = quase nada ... pico no penúltimo dia, último dia encerra 19h30).
   //   ter–sex = gasto real (G 537 / M 483); sáb→seg: Google 0, Meta = 5.000 − 1.020 = 3.979 no peso do TOTAL/dia (950 · 1.250 · 1.075).
-  var PERP_GOAL = { key: 'perp', label: 'WBN-PERPETUO', from: '2026-10-27', to: '2026-11-02', de: 'ter 27/10', ate: 'seg 02/11 (19h30)', goal: 5000, fill: 'm',
-    plan: [[0, 99], [537, 106], [0, 117], [0, 162], [0, 1154], [0, 1519], [0, 1306]], planNote: 'semana ter→seg (webinar de segunda) · reajustado 31/10 · restante todo no Meta' };
-  // aba única "🗓️ Semanas" c/ sub-abas por lote (pedido 28/10: não abrir uma aba de topo por semana)
-  function loteDefault() {
-    var t = (D.live && D.live.leadMax) || new Date().toISOString().slice(0, 10), k = LOTES[0].key;
-    LOTES.forEach(function (L) { if (L.from <= t) k = L.key; });
+  var PERP_WEEKS = extendWeeks([
+    { key: 'p1', label: 'Perpétuo S1', from: '2026-10-27', to: '2026-11-02', de: 'ter 27/10', ate: 'seg 02/11 (19h30)', goal: 5000, fill: 'm',
+      plan: [[0, 99], [537, 106], [0, 117], [0, 162], [0, 1154], [0, 1519], [0, 1306]], planNote: 'reajustado 31/10 · restante todo no Meta' },
+    // S2: mantém R$5k, tudo no Meta (fill 'm'), peso do TOTAL/dia do plano S3 × 0,25 deslocado 1 dia (ter 250 ... dom 1.250, seg 1.075)
+    { key: 'p2', label: 'Perpétuo S2', from: '2026-11-03', to: '2026-11-09', de: 'ter 03/11', ate: 'seg 09/11 (19h30)', goal: 5000, fill: 'm',
+      plan: [[0, 250], [0, 425], [0, 475], [0, 575], [0, 950], [0, 1250], [0, 1075]], planNote: 'meta R$ 5 mil · todo no Meta (pico dom/seg)' }
+  ], 'p', 'Perpétuo');
+  // sub-abas por semana nas abas Funil Terça e Funil Segunda (pedido 28/10: não abrir uma aba de topo por semana)
+  function weekDefault(list) {
+    var t = weekToday(), k = list[0].key;
+    list.forEach(function (L) { if (L.from <= t) k = L.key; });
     return k;
   }
-  var LOTE_SEL = null;
-  function loteNav() {
-    return '<div class="lote-nav"><span class="lote-nav-l">Semana:</span>' + LOTES.map(function (L) {
-      return '<button class="lote-btn' + (L.key === LOTE_SEL ? ' on' : '') + '" data-lote="' + L.key + '">' + esc(L.label) + '<span>' + dfmt(L.from) + '–' + dfmt(L.to) + (L.goal ? ' · meta ' + fBRL0(L.goal) : '') + '</span></button>';
+  var LOTE_SEL = null, PERP_SEL = null;
+  function weekNav(list, sel) {
+    return '<div class="lote-nav"><span class="lote-nav-l">Semana:</span>' + list.map(function (L) {
+      return '<button class="lote-btn' + (L.key === sel ? ' on' : '') + '" data-lote="' + L.key + '">' + esc(L.label) + '<span>' + dfmt(L.from) + '–' + dfmt(L.to) + (L.goal ? ' · meta ' + fBRL0(L.goal) : '') + '</span></button>';
     }).join('') + '</div>';
   }
-  var WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   function lpPctColor(r) { return r >= 0.95 ? 'var(--teal)' : r >= 0.8 ? 'var(--gold)' : 'var(--red)'; }
   // plano diário por plataforma × realizado (Meta c/ imposto, igual o resto da dash)
   function lotePlanSection(L, fc, today) {
@@ -2184,22 +2203,29 @@
       '</div>';
   }
   function loteByKey(k) { for (var i = 0; i < LOTES.length; i++) if (LOTES[i].key === k) return LOTES[i]; return null; }
+  function perpByKey(k) { for (var i = 0; i < PERP_WEEKS.length; i++) if (PERP_WEEKS[i].key === k) return PERP_WEEKS[i]; return null; }
+  // meta SEMPRE sobre a semana cheia (não depende da barra de período)
+  function weekGoalHtml(L, fc) {
+    return L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L, fc) : '<div class="card lote-goal lote-nogoal">🎯 <b>Meta de investimento da ' + esc(L.label) + ' ainda não definida</b> <span class="muted">— assim que chegar, entra aqui o painel de meta + plano diário por plataforma.</span></div>';
+  }
+  // filtro de data da barra de período, limitado à janela da semana
+  function weekRange(L, lo, hi) {
+    var leadMax = (D.live && D.live.leadMax) || L.to;
+    var natTo = L.to < leadMax ? L.to : leadMax;   // fim NATURAL da semana (não passa de hoje)
+    var from = L.from, to = L.to;
+    if (lo && lo > from) from = lo;
+    if (hi && hi < to) to = hi;
+    if (from > to) { from = L.from; to = L.to; }   // range fora da janela -> volta à semana cheia
+    return { from: from, to: to, filt: (from > L.from || to < natTo) ? ' <b style="color:var(--acc)">· filtrado ' + dfmt(from) + '–' + dfmt(to) + '</b>' : '' };
+  }
   // lote = janela de data do funil cap30 (captação v9 dedupada, fonte certa p/ as semanas atuais); key própria p/ sort/expand independente
   function loteFn(key) { var f = (D.cap30 && arr(D.cap30.grain).length) ? D.cap30 : D.live; return { key: key, grain: f.grain, daily: f.daily }; }
   function loteView(key, lo, hi) {
     var L = loteByKey(key); if (!L) return '';
     var fc = loteFn(key);
-    var goalHtml = L.goal ? loteGoalPanel(agg(fc, L.from, L.to), L, fc) : '<div class="card lote-goal lote-nogoal">🎯 <b>Meta de investimento da ' + esc(L.label) + ' ainda não definida</b> <span class="muted">— assim que chegar, entra aqui o painel de meta + plano diário por plataforma (igual S3).</span></div>';   // meta SEMPRE sobre o lote cheio
-    // filtro de data da barra de período, limitado à janela do lote
-    var leadMax = (D.live && D.live.leadMax) || L.to;
-    var natTo = L.to < leadMax ? L.to : leadMax;   // fim NATURAL do lote (não passa de hoje)
-    var from = L.from, to = L.to;
-    if (lo && lo > from) from = lo;
-    if (hi && hi < to) to = hi;
-    if (from > to) { from = L.from; to = L.to; }   // range fora da janela -> volta ao lote cheio
-    var filt = (from > L.from || to < natTo) ? ' <b style="color:var(--acc)">· filtrado ' + dfmt(from) + '–' + dfmt(to) + '</b>' : '';
-    var banner = '<div class="banner" style="margin-bottom:14px">🗓️ <div><b>' + esc(L.label) + '</b> — lote de captação <b>' + L.de + '</b> → <b>' + L.ate + '</b>' + filt + '. Conta o gasto e os leads <b>só desse período</b> (queries YOUTUBE_LIVE × leads, Meta + Google). Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">Use a barra de período acima pra filtrar dias dentro do lote. A virada é na terça à tarde; como os dados são diários, a terça inteira entra no lote que encerra.</span></div></div>';
-    return captacaoView(fc, from, to, banner, 'Sem dados nesse lote ainda.', goalHtml);
+    var w = weekRange(L, lo, hi);
+    var banner = '<div class="banner" style="margin-bottom:14px">🗓️ <div><b>Funil Terça · ' + esc(L.label) + '</b> — webinar na terça, captação de <b>' + L.de + '</b> → <b>' + L.ate + '</b>' + w.filt + '. Conta o gasto e os leads <b>só desse período</b> (Meta + Google). Meta com imposto ×1,1385; Google sem. <span style="color:var(--muted2)">A semana vira toda quarta. Use a barra de período acima pra filtrar dias dentro da semana. Como os dados são diários, a terça inteira entra na semana que encerra.</span></div></div>';
+    return captacaoView(fc, w.from, w.to, banner, 'Sem dados nessa semana ainda.', weekGoalHtml(L, fc));
   }
 
   /* =====================================================================
@@ -2328,7 +2354,8 @@
   var CUR = 'live';   // funil único da dash: Live YouTube
   function show(tab) {
     var subs = { otim: 1, roas: 1, perfil: 1, resp: 1, acomp: 1, consol: 1, v2: 1, leads: 1, cap30: 1, pages: 1, lotes: 1, perp: 1 };
-    if (loteByKey(tab)) { LOTE_SEL = tab; tab = 'lotes'; }   // link antigo #s2/#s3 -> aba Semanas c/ o lote certo
+    if (loteByKey(tab)) { LOTE_SEL = tab; tab = 'lotes'; }   // link #s2/#s5 -> aba Funil Terça na semana certa
+    else if (perpByKey(tab)) { PERP_SEL = tab; tab = 'perp'; }   // link #p2 -> aba Funil Segunda na semana certa
     if (!subs[tab]) tab = 'otim';
     Array.prototype.forEach.call(document.querySelectorAll('#mainTabs .tab'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
     DSUB = tab;
