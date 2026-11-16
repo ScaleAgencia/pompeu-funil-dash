@@ -2117,23 +2117,29 @@
       if (x.p === 'g') o.g += x.sp || 0; else if (x.p === 'm') o.m += x.sp || 0;
     });
     // REPLANEJAMENTO AUTOMÁTICO (pedido 23/10): a cada refresh, o total de cada plataforma (soma do plan) fica fixo
-    //   e o que sobrou é redistribuído nos dias FUTUROS, no mesmo peso do plano original.
-    //   passado = o que gastou · hoje = max(plano, gasto até agora) · gastou a mais hoje -> amanhã em diante cai; a menos -> sobe.
+    //   e o que falta é redistribuído entre HOJE e os dias seguintes, no mesmo peso do plano original.
+    //   passado = o que gastou · não bateu o plano num dia -> a diferença entra já no dia seguinte (pedido 16/11; antes HOJE
+    //   ficava fixo no plano original e a diferença só ia p/ depois de hoje -> no último dia acumulava tudo na terça).
+    //   hoje = max(cota de hoje, gasto até agora): se hoje já passou da cota, o excesso sai dos dias seguintes.
     var days = L.plan.map(function (p, i) { return addDays(L.from, i); });
+    var tIdx = days.indexOf(today);
     // L.fill = 'm' (pedido 31/10): a meta é do TOTAL e o que falta vai todo p/ o Meta -> total do Meta = meta − Google (real/plan);
     //   se o Google ainda gastar algo, o Meta dos próximos dias cai na mesma medida.
     function replan(k, pi, totOverride) {
-      var total = 0, done = 0, futW = 0;
+      var total = 0, done = 0, W = 0;
       var adj = L.plan.map(function (p, i) {
         total += p[pi];
         var d = days[i], rv = (real[d] || { g: 0, m: 0 })[k];
         if (d < today) { done += rv; return rv; }
-        if (d === today) { var t = Math.max(p[pi], rv); done += t; return t; }
-        futW += p[pi]; return null;
+        W += p[pi]; return null;   // hoje + futuro dividem o que falta
       });
       if (totOverride != null) total = totOverride;
       var left = Math.max(0, total - done);
-      return adj.map(function (v, i) { return v != null ? v : (futW > 0 ? left * L.plan[i][pi] / futW : 0); });
+      if (tIdx >= 0) {
+        var rvT = (real[today] || { g: 0, m: 0 })[k], share = W > 0 ? left * L.plan[tIdx][pi] / W : 0;
+        if (rvT > share) { adj[tIdx] = rvT; left = Math.max(0, left - rvT); W -= L.plan[tIdx][pi]; }
+      }
+      return adj.map(function (v, i) { return v != null ? v : (W > 0 ? left * L.plan[i][pi] / W : 0); });
     }
     var adjG = replan('g', 0);
     var totMFill = L.fill === 'm' ? L.goal - adjG.reduce(function (s, v) { return s + v; }, 0) : null;
@@ -2145,7 +2151,8 @@
       }
       var r = pl ? rv / pl : null;
       var pc = r == null ? '' : ' <span class="lp-pct" style="color:' + (isT ? 'var(--muted)' : lpPctColor(r)) + '">' + fPct(r, 0) + '</span>';
-      return '<td>' + fBRL0(pl) + '</td><td class="lp-real">' + fBRL0(rv) + pc + '</td>';
+      var chT = isT && orig != null && Math.abs(pl - orig) >= 5;   // hoje também é reajustado
+      return '<td' + (chT ? ' class="lp-adj"' : '') + '>' + fBRL0(pl) + (chT ? ' <span class="lp-arr" style="color:' + (pl < orig ? 'var(--gold)' : 'var(--teal)') + '">' + (pl < orig ? '↓' : '↑') + '</span><div class="lp-orig">era ' + fBRL0(orig) + '</div>' : '') + '</td><td class="lp-real">' + fBRL0(rv) + pc + '</td>';
     }
     var tp = { g: 0, m: 0 }, tr = { g: 0, m: 0 }, ap = { g: 0, m: 0 }, nxt = null, rows = '';
     L.plan.forEach(function (p, i) {
@@ -2153,7 +2160,7 @@
       tp.g += p[0]; tp.m += p[1]; tr.g += r.g; tr.m += r.m;
       if (!fut) { ap.g += p[0]; ap.m += p[1]; }
       if (fut && nxt == null) nxt = i;
-      var pg = fut ? adjG[i] : p[0], pm = fut ? adjM[i] : p[1];
+      var pg = (fut || isT) ? adjG[i] : p[0], pm = (fut || isT) ? adjM[i] : p[1];
       rows += '<tr class="' + (isT ? 'lp-today' : fut ? 'lp-fut' : '') + '"><td class="l">' + WD[new Date(d + 'T00:00:00').getDay()] + ' ' + dfmt(d) + (isT ? ' <span class="lp-tag">hoje</span>' : '') + '</td>' +
         cell(pg, r.g, fut, isT, p[0]) + cell(pm, r.m, fut, isT, p[1]) + cell(pg + pm, r.g + r.m, fut, isT, p[0] + p[1]) + '</tr>';
     });
@@ -2162,7 +2169,8 @@
     function bar(k, lab) {
       var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
       var adj = k === 'g' ? adjG : adjM;
-      var nx = nxt != null ? '<div class="lp-plat-n2">➡️ ' + WD[new Date(days[nxt] + 'T00:00:00').getDay()] + ' ' + dfmt(days[nxt]) + ' (ajustado): <b>' + fBRL0(adj[nxt]) + '</b>' + (Math.abs(adj[nxt] - L.plan[nxt][k === 'g' ? 0 : 1]) >= 5 ? ' <span class="muted">· era ' + fBRL0(L.plan[nxt][k === 'g' ? 0 : 1]) + '</span>' : '') + '</div>' : '';
+      function dayLine(i, lab) { var o = L.plan[i][k === 'g' ? 0 : 1]; return '<div class="lp-plat-n2">➡️ ' + lab + ' ' + WD[new Date(days[i] + 'T00:00:00').getDay()] + ' ' + dfmt(days[i]) + ' (ajustado): <b>' + fBRL0(adj[i]) + '</b>' + (Math.abs(adj[i] - o) >= 5 ? ' <span class="muted">· era ' + fBRL0(o) + '</span>' : '') + '</div>'; }
+      var nx = (tIdx >= 0 ? dayLine(tIdx, 'Hoje') : '') + (nxt != null ? dayLine(nxt, tIdx >= 0 ? 'Amanhã' : 'Próximo') : '');
       return '<div class="lp-plat ' + k + '"><div class="lp-plat-h"><span class="lp-plat-n"><i class="dot ' + k + '"></i>' + lab + '</span><span><b>' + fBRL0(rv) + '</b> <span class="muted">de ' + fBRL0(pl) + '</span></span></div>' +
         '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, pl ? rv / pl * 100 : 0).toFixed(1) + '%;background:var(--' + (k === 'g' ? 'goog' : 'meta') + ')"></i><span class="lg-mark" style="left:' + Math.min(100, pl ? acc / pl * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
         '<div class="lp-plat-s">plano até hoje <b>' + fBRL0(acc) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, pl - rv)) + '</b></div>' + nx + '</div>';
@@ -2174,8 +2182,8 @@
       '<div class="lp-note">🔄 <b>Plano dos próximos dias recalculado a cada atualização</b>: ' +
         (totMFill != null
           ? 'a meta total (' + fBRL0(L.goal) + ') fica fixa e <b>tudo o que falta vai pro Meta</b> (Google sem verba nos próximos dias). Se o Google ainda gastar algo, o Meta dos próximos dias cai na mesma medida. '
-          : 'o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído nos dias seguintes, no mesmo peso do plano. ') +
-        'Gastou acima hoje → os próximos dias caem (↓); abaixo → sobem (↑). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano previa até hoje.</div></div>';
+          : 'o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído entre <b>hoje e os dias seguintes</b>, no mesmo peso do plano. ') +
+        'Não bateu o plano num dia → a diferença já entra no dia seguinte (↑); passou do plano → os próximos dias caem (↓). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano original previa até hoje.</div></div>';
   }
   function loteGoalPanel(a, L, fc) {
     if (!L.goal) return '';
@@ -2183,7 +2191,8 @@
     var dtot = Math.round((new Date(L.to + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
     var today = (D.live && D.live.leadMax) || L.to; if (today > L.to) today = L.to; if (today < L.from) today = L.from;
     var delap = Math.round((new Date(today + 'T00:00:00') - new Date(L.from + 'T00:00:00')) / 86400000) + 1;
-    var dleft = Math.max(0, dtot - delap);
+    var ended = ((D.live && D.live.leadMax) || L.to) > L.to;
+    var dleft = ended ? 0 : Math.max(0, dtot - delap) + 1;   // dias que faltam CONTANDO HOJE (hoje também recebe a diferença)
     var expected = goal * delap / dtot;
     if (L.plan) { expected = 0; for (var pi = 0; pi < delap && pi < L.plan.length; pi++) expected += L.plan[pi][0] + L.plan[pi][1]; }   // ritmo esperado = plano acumulado
     var ratio = expected ? spent / expected : 1;
@@ -2195,14 +2204,14 @@
       '<div class="lg-top"><div class="klabel">🎯 Meta de investimento · ' + esc(L.label) + '</div><div class="lg-pct" style="color:' + st.c + '">' + fPct(pct, 0) + '</div></div>' +
       '<div class="lg-val"><b>' + fBRL0(spent) + '</b> <span class="muted">de ' + fBRL0(goal) + '</span></div>' +
       '<div class="goalbar lg-bar"><i style="width:' + barPct + '%;background:' + st.c + '"></i><span class="lg-mark" style="left:' + Math.min(100, expected / goal * 100).toFixed(1) + '%" title="ritmo esperado hoje"></span></div>' +
-      '<div class="lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span> <span class="muted">·</span> <span>faltam <b class="kv">' + fBRL0(rem) + '</b>' + (dleft > 0 ? ' em <b class="kv">' + dleft + ' dia' + (dleft > 1 ? 's' : '') + '</b> (até ' + dfmt(L.to) + ')' : ' · lote encerrado') + '</span></div>' +
+      '<div class="lg-sub"><span style="color:' + st.c + '">● ' + st.t + '</span> <span class="muted">·</span> <span>faltam <b class="kv">' + fBRL0(rem) + '</b>' + (dleft > 0 ? ' em <b class="kv">' + dleft + ' dia' + (dleft > 1 ? 's' : '') + '</b> (hoje até ' + dfmt(L.to) + ')' : ' · lote encerrado') + '</span></div>' +
       '<div class="lg-stats">' +
       '<div class="lg-stat"><div class="lg-stat-l">📊 Ritmo atual</div><div class="lg-stat-v">' + fBRL0(ritmoAtual) + '<span>/dia</span></div><div class="lg-stat-s">' + fInt(delap) + ' dia' + (delap > 1 ? 's' : '') + ' rodando</div></div>' +
       (dleft > 0
-        ? '<div class="lg-stat"><div class="lg-stat-l">🎯 Precisa investir</div><div class="lg-stat-v" style="color:' + st.c + '">' + fBRL0(perDay) + '<span>/dia</span></div><div class="lg-stat-s">p/ bater nos ' + dleft + ' dia' + (dleft > 1 ? 's' : '') + ' restantes</div></div>'   // card "⚡ Precisa subir" removido a pedido (23/10)
+        ? '<div class="lg-stat"><div class="lg-stat-l">🎯 Precisa investir</div><div class="lg-stat-v" style="color:' + st.c + '">' + fBRL0(perDay) + '<span>/dia</span></div><div class="lg-stat-s">p/ bater nos ' + dleft + ' dia' + (dleft > 1 ? 's' : '') + ' que faltam (contando hoje)</div></div>'   // card "⚡ Precisa subir" removido a pedido (23/10)
         :'<div class="lg-stat"><div class="lg-stat-l">Encerrado</div><div class="lg-stat-v">' + fPct(pct, 0) + '</div><div class="lg-stat-s">da meta atingido</div></div>') +
       '</div>' +
-      (fc ? lotePlanSection(L, fc, today) : '') +
+      (fc ? lotePlanSection(L, fc, ended ? addDays(L.to, 1) : today) : '') +   // semana encerrada: todos os dias = passado
       '</div>';
   }
   function loteByKey(k) { for (var i = 0; i < LOTES.length; i++) if (LOTES[i].key === k) return LOTES[i]; return null; }
