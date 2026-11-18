@@ -30,7 +30,8 @@ $G_META_SEG    = 1484394087
 $G_GOOG_SEG    = 968000625
 # --- Webinar DIARIO (funil novo, Meta + Google) ---
 $G_META_DIARIO  = 0            # aba "Queries | WBN DIARIO" (col order: Day,Campaign,Ad,AdSet,...)
-$G_GOOG_DIARIO  = 1609119011  # aba "Queries Google WBN DIARIO" (col order PADRAO: Day,Campaign,AdGroup,Ad,Cost,...)
+$G_GOOG_DIARIO  = 202         # 18/11: Google mudou de fonte -> planilha 17xTn aba gid202 (Day,Campaign,AdGroup,Ad,Cost,...,Account Name; contas G-POMPEU + G-CA02, historico desde jan)
+$QID_GOOG_DIARIO = '17xTn-w1F3gaJqrgrQjPLqZi2Nt4x1-i0_AUhs2hz7Cc'   #   (antes: QID_DIARIO aba gid1609119011 — mesmos numeros, conferido 18/11)
 $G_LEADS_DIARIO = 1529016880  # aba v5 (filtrar Tag = WBN-2026-DIARIO; src google-ads = Google, facebook-ads = Meta)
 $G_PESQ_DIARIO  = 323578863   # aba "pesquisa diario"
 # --- Webinar 2 DIAS (edicao SEMANAL; leads AGORA na aba v7 a partir de 01/09/2026; MESMAS queries do diario) ---
@@ -75,8 +76,8 @@ $CAP30_FROM     = '2026-09-30'
 #   nesta planilha (colunas em ORDEM DIFERENTE: Campaign,Adset,Ad,Spend,Impr,LPV,Clicks,Checkout,Date).
 #   A antiga continua listando os mesmos anuncios c/ GASTO 0 mas com LPV/cliques do pixel -> somar as
 #   duas DOBRARIA LPV/cliques. Regra: nos dias que a NOVA cobre, usa SO a nova; dias anteriores = antiga.
-$QID_META_LIVE2 = '1xJQ3mNxDhu2XyyXrznKnlccRZOi_RA5EpCyTf6BmpXQ'
-$G_META_LIVE2   = 0
+$QID_META_LIVE2 = '17xTn-w1F3gaJqrgrQjPLqZi2Nt4x1-i0_AUhs2hz7Cc'   # 18/11: Meta mudou de fonte -> planilha 17xTn aba gid201 (conta CA05, desde 20/10; antes 1xJQ3 gid0 — mesmos numeros)
+$G_META_LIVE2   = 201
 
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dataDir = Join-Path $root 'data'
@@ -339,7 +340,7 @@ function GNode($grain, $d, $p, $ci, $si, $ai) {
 # ========================================================================
 #  Build one funnel
 # ========================================================================
-function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '', $metaId2 = '', $gMeta2 = 0, $campAny = '', $campAnyFrom = '', $extraLeadRows = $null) {
+function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = $QID, $leadsId = $LID, $tagMode = 'num', $metaAdBeforeSet = $false, $decodeUtm = $false, $metaOnly = $false, $buildNameIdx = $false, $abcScore = $false, $campMust = '', $campMustNot = '', $leadSetColM = 7, $leadSetColG = 7, $survFrom = '', $leadCampMust = '', $leadCampMustNot = '', $googUnifyCamp = '', $dedupEmail = $false, $gLeads2 = '', $dateFrom = '', $googUnifyExcept = '', $metaId2 = '', $gMeta2 = 0, $campAny = '', $campAnyFrom = '', $extraLeadRows = $null, $googId = '') {
   # $dedupEmail: remove leads com email REPETIDO (mantem so o 1o de cada email no funil) -> conta lead real,
   #   nao infla CPL/conversao de pagina. Vale Google+Meta juntos (dedup e por funil).
   # $googUnifyCamp: se setado, TODA campanha do GOOGLE (query e lead) que passa no campMust/leadCampMust vira
@@ -372,7 +373,7 @@ function Build-Funnel($key, $tagPfx, $gMeta, $gGoog, $gLeads, $gPesq, $metaId = 
   $T = [Diagnostics.Stopwatch]::StartNew()
   $fMeta = Get-Csv $metaId $gMeta "$key`_meta"
   $fMeta2 = if ($metaId2 -ne '') { Get-Csv $metaId2 $gMeta2 "$key`_meta2" } else { $null }   # Meta conta NOVA (21/10)
-  $fGoog = if ($null -ne $gGoog) { Get-Csv $metaId $gGoog "$key`_goog" } else { $null }   # Google na MESMA planilha do Meta do funil
+  $fGoog = if ($null -ne $gGoog) { Get-Csv $(if ($googId -ne '') { $googId } else { $metaId }) $gGoog "$key`_goog" } else { $null }   # Google na planilha do Meta do funil, ou na $googId (fonte propria, 18/11)
   $fLead = Get-Csv $leadsId $gLeads "$key`_leads"
   $fLead2 = if ($gLeads2 -ne '') { Get-Csv $leadsId $gLeads2 "$key`_leads2" } else { $null }   # 2a aba de leads (live = v8+v9)
   $fPesq = if ($null -ne $gPesq) { Get-Csv $leadsId $gPesq "$key`_pesq" } else { $null }   # 2-dias ainda sem pesquisa
@@ -829,12 +830,12 @@ $terI = Build-Funnel 'terca'   'WBN-2026-L' $G_META_TERCA $G_GOOG_TERCA $G_LEADS
 # DIARIO: query = campanhas que COMECAM com "WBN-DIARIO" (campMust) E NAO sao 2-dias (campMustNot).
 #   Isso exclui campanhas orfas de OUTROS funis que vazam na query compartilhada (ex: 'WBN-2026_..._URL-Investimentos'
 #   sem 'DIARIO' no nome, R$6993 gasto e 0 lead). Todas as campanhas reais do diario tem 'WBN-DIARIO'.
-$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC;$CAMP_LIVE;$CAMP_PERP" 7 7 '' '' $CAMP_CALC
+$diaI = Build-Funnel 'diario' 'WBN-2026-DIARIO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_DIARIO $G_PESQ_DIARIO $QID_DIARIO $LID 'exact' $true $true $false $true $true 'WBNDIARIO' "$CAMP_2DIAS;$CAMP_CALC;$CAMP_LIVE;$CAMP_PERP" 7 7 '' '' $CAMP_CALC -googId $QID_GOOG_DIARIO
 # 2 DIAS: leads na aba v7 (edicao SEMANAL, comecou 01/09), MESMAS queries mas SO WBN-2DIAS; SEM pesquisa ($null) ->
 #   abcScore=$false (captacao pura). conjunto: Facebook=utm_medium(5), Google=utm_term(7).
 # pesquisa LIGADA (aba pesquisa_diario_2_dias, so respostas >= 01/09/2026 = cohort v7); abcScore=$true (leadscore mesmos params)
 # LIVE YOUTUBE: leads v8 por campanha (YOUTUBE_LIVE), queries mesmas abas, pesquisa DEDICADA pesquisa_diario_22, leadscore A/B/C ($abcScore=$true).
-$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
+$liveI = Build-Funnel 'live' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE $G_PESQ_LIVE $QID_DIARIO $LID 'contains' $true $true $false $true $true $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -gLeads2 $G_LEADS_LIVE2 -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM -googId $QID_GOOG_DIARIO
 # OVERRIDE PONTUAL: erro interno no gasto de 21/09 -> a query mostra inflado. O cliente informou o gasto REAL do dia.
 #   Trava o TOTAL do dia (Meta+Google) em R$ 470,56, distribuido PROPORCIONALMENTE entre as campanhas (mantem o peso relativo).
 #   SO 21/09; 22/09 em diante = query real, sem override. Se o erro se repetir noutro dia, adicionar aqui.
@@ -850,7 +851,7 @@ $ter = Finalize-Funnel $terI 2   # webinario na TERCA   -> ciclo terca..segunda
 $dia = Finalize-Funnel $diaI 0   # DIARIO: webinario diario -> sem edicoes semanais
 $live = Finalize-Funnel $liveI 0 $false  # LIVE YOUTUBE: SEM dropLeadless — campMust=YOUTUBELIVE ja isola; dropLeadless escondia gasto de campanhas Google (teste) que gastam mas ainda sem lead atribuido
 # CAP30: aba "Captacao 30/09" — SO a v9, gasto+leads a partir de 30/09 ($CAP30_FROM). Captacao pura (CPL), sem pesquisa/leadscore. Nao entra na Attribute-Sales (sem ROAS).
-$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM
+$cap30I = Build-Funnel 'cap30' 'WBN-2026-SEMANAL' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_LIVE2 $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_LIVE $CAMP_PERP 5 7 '' $CAMP_LIVE -leadCampMustNot $CAMP_PERP -googUnifyCamp $CAMP_LIVE_GOOG_UNIFY -dedupEmail $true -dateFrom $CAP30_FROM -googUnifyExcept $CAMP_LIVE_GOOG_KEEP -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -campAny $CAMP_LIVE_ANY -campAnyFrom $CAMP_LIVE_ANY_FROM -googId $QID_GOOG_DIARIO
 $cap30 = Finalize-Funnel $cap30I 0 $false
 # WBN-PERPETUO · LEADS (29/10): caem em 3 lugares, 1 por faixa de investimento (pagina 297/469/797):
 #   LID aba v11 (tag ...-297) + LID aba v10 (...-469 / -469-2) -> mesmo layout das v8/v9 (Nome,Email,WhatsApp,Tag,src,med,camp,term,content,Timestamp)
@@ -886,7 +887,7 @@ function Get-PerpExtraLeads {
 }
 # WBN-PERPETUO (28/10): funil NOVO, campanhas c/ 'funil-perpetuo' (Meta conta nova + Google). Captacao pura (CPL), sem pesquisa/ROAS.
 #   Leads: por enquanto procura utm_campaign c/ funil-perpetuo na v9 (cliente ainda vai mandar a lista propria -> trocar aqui).
-$perpI = Build-Funnel 'perp' 'WBN-PERPETUO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_PERP $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_PERP '' 5 7 '' $CAMP_PERP -dedupEmail $true -dateFrom $PERP_FROM -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -gLeads2 $G_LEADS_PERP2 -extraLeadRows (Get-PerpExtraLeads)
+$perpI = Build-Funnel 'perp' 'WBN-PERPETUO' $G_META_DIARIO $G_GOOG_DIARIO $G_LEADS_PERP $null $QID_DIARIO $LID 'contains' $true $true $false $false $false $CAMP_PERP '' 5 7 '' $CAMP_PERP -dedupEmail $true -dateFrom $PERP_FROM -metaId2 $QID_META_LIVE2 -gMeta2 $G_META_LIVE2 -gLeads2 $G_LEADS_PERP2 -extraLeadRows (Get-PerpExtraLeads) -googId $QID_GOOG_DIARIO
 $perp = Finalize-Funnel $perpI 0 $false
 
 # ---- dimension metadata (labels + peso) ---------------------------------
