@@ -2092,7 +2092,11 @@
       plan: [[0, 99], [537, 106], [0, 117], [0, 162], [0, 1154], [0, 1519], [0, 1306]], planNote: 'reajustado 31/10 · restante todo no Meta' },
     // S2: mantém R$5k, tudo no Meta (fill 'm'), peso do TOTAL/dia do plano S3 × 0,25 deslocado 1 dia (ter 250 ... dom 1.250, seg 1.075)
     { key: 'p2', label: 'Perpétuo S2', from: '2026-11-03', to: '2026-11-09', de: 'ter 03/11', ate: 'seg 09/11 (19h30)', goal: 5000, fill: 'm',
-      plan: [[0, 250], [0, 425], [0, 475], [0, 575], [0, 950], [0, 1250], [0, 1075]], planNote: 'meta R$ 5 mil · todo no Meta (pico dom/seg)' }
+      plan: [[0, 250], [0, 425], [0, 475], [0, 575], [0, 950], [0, 1250], [0, 1075]], planNote: 'meta R$ 5 mil · todo no Meta (pico dom/seg)' },
+    { key: 'p3', label: 'Perpétuo S3', from: '2026-11-10', to: '2026-11-16', de: 'ter 10/11', ate: 'seg 16/11 (19h30)' },   // sem meta
+    // S4 (pedido 18/11): meta R$5k até seg 23/11, só o TOTAL (pool: Google + Meta somados, os 2 rodando). Peso do total/dia do plano S3 × 0,25 deslocado.
+    { key: 'p4', label: 'Perpétuo S4', from: '2026-11-17', to: '2026-11-23', de: 'ter 17/11', ate: 'seg 23/11 (19h30)', goal: 5000, pool: true,
+      plan: [[250], [425], [475], [575], [950], [1250], [1075]], planNote: 'meta R$ 5 mil até seg 23/11 (pico dom/seg)' }
   ], 'p', 'Perpétuo');
   // sub-abas por semana nas abas Funil Terça e Funil Segunda (pedido 28/10: não abrir uma aba de topo por semana)
   function weekDefault(list) {
@@ -2108,6 +2112,34 @@
   }
   function lpPctColor(r) { return r >= 0.95 ? 'var(--teal)' : r >= 0.8 ? 'var(--gold)' : 'var(--red)'; }
   // plano diário por plataforma × realizado (Meta c/ imposto, igual o resto da dash)
+  // L.pool (pedido 18/11, Funil Segunda): meta só do TOTAL (Google + Meta somados), sem valor travado por plataforma.
+  //   plan = [[total do dia], ...]; mesmo replanejamento (o que falta vai p/ hoje + dias seguintes, no peso do plano).
+  function lotePoolSection(L, real, days, today, tIdx, adj) {
+    var tp = 0, tr = { g: 0, m: 0, t: 0 }, ap = 0, nxt = null, rows = '';
+    L.plan.forEach(function (p, i) {
+      var d = days[i], r = real[d] || { g: 0, m: 0, t: 0 }, fut = d > today, isT = d === today;
+      tp += p[0]; tr.g += r.g; tr.m += r.m; tr.t += r.t;
+      if (!fut) ap += p[0];
+      if (fut && nxt == null) nxt = i;
+      var pl = (fut || isT) ? adj[i] : p[0], ch = (fut || isT) && Math.abs(pl - p[0]) >= 5;
+      var plTd = '<td' + (ch || fut ? ' class="lp-adj"' : '') + '>' + fBRL0(pl) + (ch ? ' <span class="lp-arr" style="color:' + (pl < p[0] ? 'var(--gold)' : 'var(--teal)') + '">' + (pl < p[0] ? '↓' : '↑') + '</span><div class="lp-orig">era ' + fBRL0(p[0]) + '</div>' : '') + '</td>';
+      var rr = pl ? r.t / pl : null;
+      rows += '<tr class="' + (isT ? 'lp-today' : fut ? 'lp-fut' : '') + '"><td class="l">' + WD[new Date(d + 'T00:00:00').getDay()] + ' ' + dfmt(d) + (isT ? ' <span class="lp-tag">hoje</span>' : '') + '</td>' + plTd +
+        (fut ? '<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>'
+             : '<td>' + fBRL0(r.g) + '</td><td>' + fBRL0(r.m) + '</td><td class="lp-real">' + fBRL0(r.t) + (rr == null ? '' : ' <span class="lp-pct" style="color:' + (isT ? 'var(--muted)' : lpPctColor(rr)) + '">' + fPct(rr, 0) + '</span>') + '</td>') + '</tr>';
+    });
+    rows += '<tr class="tot"><td class="l">Total</td><td>' + fBRL0(tp) + '</td><td>' + fBRL0(tr.g) + '</td><td>' + fBRL0(tr.m) + '</td><td class="lp-real">' + fBRL0(tr.t) + ' <span class="lp-pct" style="color:var(--muted)">' + fPct(tp ? tr.t / tp : 0, 0) + '</span></td></tr>';
+    function dayLine(i, lab) { return '<div class="lp-plat-n2">➡️ ' + lab + ' ' + WD[new Date(days[i] + 'T00:00:00').getDay()] + ' ' + dfmt(days[i]) + ' (ajustado): <b>' + fBRL0(adj[i]) + '</b>' + (Math.abs(adj[i] - L.plan[i][0]) >= 5 ? ' <span class="muted">· era ' + fBRL0(L.plan[i][0]) + '</span>' : '') + '</div>'; }
+    var dif = tr.t - ap, r = ap ? tr.t / ap : 1;
+    var bar = '<div class="lp-plat"><div class="lp-plat-h"><span class="lp-plat-n">Google + Meta <span class="muted" style="font-weight:500">(Meta c/ imposto)</span></span><span><b>' + fBRL0(tr.t) + '</b> <span class="muted">de ' + fBRL0(tp) + '</span></span></div>' +
+      '<div class="goalbar lg-bar"><i style="width:' + Math.min(100, tp ? tr.t / tp * 100 : 0).toFixed(1) + '%;background:var(--acc)"></i><span class="lg-mark" style="left:' + Math.min(100, tp ? ap / tp * 100 : 0).toFixed(1) + '%" title="plano acumulado até hoje"></span></div>' +
+      '<div class="lp-plat-s">Google <b>' + fBRL0(tr.g) + '</b> · Meta <b>' + fBRL0(tr.m) + '</b> · plano até hoje <b>' + fBRL0(ap) + '</b> · <span style="color:' + lpPctColor(r) + '">' + (dif >= 0 ? '+' : '−') + fBRL0(Math.abs(dif)) + ' ' + (dif >= 0 ? 'acima' : 'abaixo') + '</span> · faltam <b>' + fBRL0(Math.max(0, tp - tr.t)) + '</b></div>' +
+      (tIdx >= 0 ? dayLine(tIdx, 'Hoje') : '') + (nxt != null ? dayLine(nxt, tIdx >= 0 ? 'Amanhã' : 'Próximo') : '') + '</div>';
+    return '<div class="lp-wrap"><div class="klabel" style="margin-bottom:10px">📅 Plano de verba por dia · Google + Meta somados' + (L.planNote ? ' <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">· ' + esc(L.planNote) + '</span>' : '') + '</div>' +
+      '<div class="lp-plats" style="grid-template-columns:1fr">' + bar + '</div>' +
+      '<div class="tbl-scroll"><table class="vtbl dia-tbl lp-tbl"><thead><tr><th class="l">Dia</th><th>Plano</th><th class="lp-g">Google real</th><th class="lp-m">Meta real</th><th>Total real</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="lp-note">🔄 <b>Plano recalculado a cada atualização</b>: a meta é do <b>total</b> (' + fBRL0(tp) + ', Google + Meta somados, sem valor fixo por plataforma) e o que falta é redistribuído entre <b>hoje e os dias seguintes</b>, no mesmo peso do plano. Não bateu o plano num dia → a diferença já entra no dia seguinte (↑); passou do plano → os próximos dias caem (↓). Hoje é parcial (dado até a última atualização).</div></div>';
+  }
   function lotePlanSection(L, fc, today) {
     if (!L.plan) return '';
     var real = {};
@@ -2115,6 +2147,7 @@
       if (x.d < L.from || x.d > L.to) return;
       var o = real[x.d] || (real[x.d] = { g: 0, m: 0 });
       if (x.p === 'g') o.g += x.sp || 0; else if (x.p === 'm') o.m += x.sp || 0;
+      o.t = o.g + o.m;
     });
     // REPLANEJAMENTO AUTOMÁTICO (pedido 23/10): a cada refresh, o total de cada plataforma (soma do plan) fica fixo
     //   e o que falta é redistribuído entre HOJE e os dias seguintes, no mesmo peso do plano original.
@@ -2141,6 +2174,7 @@
       }
       return adj.map(function (v, i) { return v != null ? v : (W > 0 ? left * L.plan[i][pi] / W : 0); });
     }
+    if (L.pool) return lotePoolSection(L, real, days, today, tIdx, replan('t', 0));
     var adjG = replan('g', 0);
     var totMFill = L.fill === 'm' ? L.goal - adjG.reduce(function (s, v) { return s + v; }, 0) : null;
     var adjM = replan('m', 1, totMFill);
@@ -2194,7 +2228,7 @@
     var ended = ((D.live && D.live.leadMax) || L.to) > L.to;
     var dleft = ended ? 0 : Math.max(0, dtot - delap) + 1;   // dias que faltam CONTANDO HOJE (hoje também recebe a diferença)
     var expected = goal * delap / dtot;
-    if (L.plan) { expected = 0; for (var pi = 0; pi < delap && pi < L.plan.length; pi++) expected += L.plan[pi][0] + L.plan[pi][1]; }   // ritmo esperado = plano acumulado
+    if (L.plan) { expected = 0; for (var pi = 0; pi < delap && pi < L.plan.length; pi++) expected += (L.plan[pi][0] || 0) + (L.plan[pi][1] || 0); }   // pool: só [total]   // ritmo esperado = plano acumulado
     var ratio = expected ? spent / expected : 1;
     var st = ratio >= 0.98 ? { c: 'var(--teal)', t: 'no ritmo ✓' } : ratio >= 0.85 ? { c: 'var(--gold)', t: 'quase no ritmo' } : { c: 'var(--red)', t: 'atrás do ritmo' };
     var perDay = dleft > 0 ? rem / dleft : 0;              // quanto PRECISA investir/dia p/ bater a meta
