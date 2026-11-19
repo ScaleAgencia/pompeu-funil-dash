@@ -2098,8 +2098,10 @@
       plan: [[0, 250], [0, 425], [0, 475], [0, 575], [0, 950], [0, 1250], [0, 1075]], planNote: 'meta R$ 5 mil · todo no Meta (pico dom/seg)' },
     { key: 'p3', label: 'Perpétuo S3', from: '2026-11-10', to: '2026-11-16', de: 'ter 10/11', ate: 'seg 16/11 (19h30)' },   // sem meta
     // S4 (pedido 18/11): meta R$5k até seg 23/11, só o TOTAL (pool: Google + Meta somados, os 2 rodando). Peso do total/dia do plano S3 × 0,25 deslocado.
-    { key: 'p4', label: 'Perpétuo S4', from: '2026-11-17', to: '2026-11-23', de: 'ter 17/11', ate: 'seg 23/11 (19h30)', goal: 5000, pool: true,
-      plan: [[250], [425], [475], [575], [950], [1250], [1075]], planNote: 'meta R$ 5 mil até seg 23/11 (pico dom/seg)' }
+    //   19/11: cliente mandou plano por plataforma (Google 3.180 + Meta 1.820, ter 17/11 = já investido) -> sai do pool.
+    //   fill 'g': Meta já passou do plano dele (ter+qua R$ 2.044 vs 1.820) -> o excesso sai do Google p/ a semana fechar em R$ 5 mil.
+    { key: 'p4', label: 'Perpétuo S4', from: '2026-11-17', to: '2026-11-23', de: 'ter 17/11', ate: 'seg 23/11 (19h30)', goal: 5000, fill: 'g',
+      plan: [[790, 1137], [370, 114], [350, 114], [370, 114], [440, 114], [370, 114], [490, 113]], planNote: 'plano do cliente 19/11 · Google fica com o que sobra da meta total' }
   ], 'p', 'Perpétuo');
   // sub-abas por semana nas abas Funil Terça e Funil Segunda (pedido 28/10: não abrir uma aba de topo por semana)
   function weekDefault(list) {
@@ -2178,9 +2180,12 @@
       return adj.map(function (v, i) { return v != null ? v : (W > 0 ? left * L.plan[i][pi] / W : 0); });
     }
     if (L.pool) return lotePoolSection(L, real, days, today, tIdx, replan('t', 0));
-    var adjG = replan('g', 0);
-    var totMFill = L.fill === 'm' ? L.goal - adjG.reduce(function (s, v) { return s + v; }, 0) : null;
-    var adjM = replan('m', 1, totMFill);
+    function sumA(a) { return a.reduce(function (s, v) { return s + v; }, 0); }
+    // L.fill = 'g' (pedido 19/11, Perpétuo S4): Meta segue o plano dele; o Google fica com o que sobra da meta TOTAL
+    //   -> Meta passou do plano = Google cai na mesma medida (e vice-versa); a semana fecha na meta.
+    var adjG, adjM, totMFill = null, totGFill = null;
+    if (L.fill === 'g') { adjM = replan('m', 1); totGFill = L.goal - sumA(adjM); adjG = replan('g', 0, totGFill); }
+    else { adjG = replan('g', 0); totMFill = L.fill === 'm' ? L.goal - sumA(adjG) : null; adjM = replan('m', 1, totMFill); }
     function cell(pl, rv, fut, isT, orig) {
       if (fut) {
         var ch = orig != null && Math.abs(pl - orig) >= 5;   // < R$5 = ruído, não marca
@@ -2202,6 +2207,7 @@
         cell(pg, r.g, fut, isT, p[0]) + cell(pm, r.m, fut, isT, p[1]) + cell(pg + pm, r.g + r.m, fut, isT, p[0] + p[1]) + '</tr>';
     });
     if (totMFill != null) { tp.g = L.goal - totMFill; tp.m = totMFill; }   // fill: Google = o que já foi (real/plan), Meta = o que falta p/ a meta total
+    if (totGFill != null) { tp.m = L.goal - totGFill; tp.g = totGFill; }   // fill 'g': Meta = plano/real dele, Google = o resto da meta total
     rows += '<tr class="tot"><td class="l">Total</td>' + cell(tp.g, tr.g, false, true) + cell(tp.m, tr.m, false, true) + cell(tp.g + tp.m, tr.g + tr.m, false, true) + '</tr>';
     function bar(k, lab) {
       var pl = tp[k], rv = tr[k], acc = ap[k], dif = rv - acc, r = acc ? rv / acc : 1;
@@ -2219,7 +2225,9 @@
       '<div class="lp-note">🔄 <b>Plano dos próximos dias recalculado a cada atualização</b>: ' +
         (totMFill != null
           ? 'a meta total (' + fBRL0(L.goal) + ') fica fixa e <b>tudo o que falta vai pro Meta</b> (Google sem verba nos próximos dias). Se o Google ainda gastar algo, o Meta dos próximos dias cai na mesma medida. '
-          : 'o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído entre <b>hoje e os dias seguintes</b>, no mesmo peso do plano. ') +
+          : totGFill != null
+          ? 'a meta total (' + fBRL0(L.goal) + ') fica fixa: o <b>Meta</b> segue o plano dele e o <b>Google fica com o que sobra</b>. Meta passou do plano → o Google cai na mesma medida (e vice-versa). O que falta é redistribuído entre <b>hoje e os dias seguintes</b>, no peso do plano. '
+          :'o total de cada plataforma (Google ' + fBRL0(tp.g) + ' · Meta ' + fBRL0(tp.m) + ') fica fixo e o que falta é redistribuído entre <b>hoje e os dias seguintes</b>, no mesmo peso do plano. ') +
         'Não bateu o plano num dia → a diferença já entra no dia seguinte (↑); passou do plano → os próximos dias caem (↓). Hoje é parcial (dado até a última atualização). O traço na barra marca quanto o plano original previa até hoje.</div></div>';
   }
   function loteGoalPanel(a, L, fc) {
